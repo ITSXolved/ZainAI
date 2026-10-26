@@ -1,0 +1,14 @@
+services:
+  zainai-conference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zainai-conference:latest
+    container_name: zainai-conference
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    restart: unless-stopped

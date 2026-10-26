@@ -305,7 +305,8 @@ class HoloAvatar:
         # of audio, and at 60 fps that alone made the mouth behave differently
         # than at 20.
         if v_seq is not None:
-            for lv, op, _wd in v_seq:
+            for item in v_seq:
+                lv, op = item[0], item[1]
                 self._mouth_step(v_hop, amp, live, op, lv)
         else:
             self._mouth_step(dt, amp, live, v_open, v_level)

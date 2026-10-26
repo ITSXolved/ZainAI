@@ -49,6 +49,21 @@ except Exception as _e:            # noqa: BLE001 - reported, never fatal
     HAVE_VIDEO = False
     print(f"[Video] playback unavailable ({_e}) — the HUD will not show video.")
 
+try:
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+    from PyQt6.QtWebEngineCore import QWebEnginePage
+    from PyQt6.QtWebChannel import QWebChannel
+    HAVE_WEBENGINE = True
+except Exception as _e:
+    QWebEngineView = QWebEnginePage = QWebChannel = None
+    HAVE_WEBENGINE = False
+    print(f"[WebEngine] unavailable ({_e}) — using browser fallback.")
+
+try:
+    from core.conference_server import get_conference_server
+except Exception:
+    get_conference_server = None
+
 from PyQt6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSplitter,
@@ -403,7 +418,7 @@ class _SysMetrics:
 _metrics = _SysMetrics()
 
 class HudCanvas(QWidget):
-    def __init__(self, face_path: str, assistant_name: str = "J.A.R.V.I.S", parent=None):
+    def __init__(self, face_path: str, assistant_name: str = "ZainAI", parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
         self.setMinimumSize(300, 300)
@@ -543,6 +558,11 @@ class HudCanvas(QWidget):
             lv = 1.0
         if lv > self._live_amp:
             self._live_amp = lv
+        if get_conference_server is not None:
+            try:
+                get_conference_server().broadcast_audio_level(lv)
+            except Exception:
+                pass
 
     def _make_grid(self, W: int, H: int) -> QPixmap:
         """Pre-render the static grid-dot background into a transparent pixmap so
@@ -582,11 +602,17 @@ class HudCanvas(QWidget):
                 j = self._vis_i if self._vis_i is not None else i
                 v_seq = frames[max(0, j):i + 1]
                 self._vis_i = max(j, i + 1)
-                v_level, v_open, v_wide = frames[i]
+                v_level, v_open, v_wide = frames[i][:3]
+                v_tag = frames[i][3] if len(frames[i]) > 3 else ""
                 if v_seq:
                     peak = max(f[0] for f in v_seq)
                     if peak > self._live_amp:
                         self._live_amp = peak
+                if get_conference_server is not None:
+                    try:
+                        get_conference_server().broadcast_viseme(v_level, v_open, v_wide, v_tag)
+                    except Exception:
+                        pass
             elif i >= len(frames):
                 self._visemes = None        # schedule spent
                 self._vis_i = None
@@ -1037,7 +1063,7 @@ class LogWidget(QTextEdit):
         self._text    = ""
         self._pos     = 0
         self._tag     = "sys"
-        self._ai_name_lc = "jarvis"   # updated when assistant name changes
+        self._ai_name_lc = "zainai"   # updated when assistant name changes
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._sig.connect(self._enqueue)
@@ -1060,7 +1086,7 @@ class LogWidget(QTextEdit):
         tl = self._text.lower()
         _ai_pfx = f"{self._ai_name_lc}:"
         if   tl.startswith("you:"):                              self._tag = "you"
-        elif tl.startswith(_ai_pfx) or tl.startswith("jarvis:"): self._tag = "ai"
+        elif tl.startswith(_ai_pfx) or tl.startswith("jarvis:") or tl.startswith("zainai:"): self._tag = "ai"
         elif tl.startswith("file:"):                             self._tag = "file"
         elif "err" in tl:                                        self._tag = "err"
         else:                                                    self._tag = "sys"
@@ -1197,7 +1223,7 @@ class FileDropZone(QWidget):
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select a file for JARVIS", str(Path.home()),
+            self, "Select a file for ZainAI", str(Path.home()),
             "All Files (*.*);;"
             "Images (*.jpg *.jpeg *.png *.gif *.webp *.bmp *.svg);;"
             "Documents (*.pdf *.docx *.txt *.md *.pptx);;"
@@ -1619,7 +1645,7 @@ class CustomizeOverlay(QWidget):
     saved = pyqtSignal(str, str, str, str)   # assistant_name, user_name, ui_color, voice
     _OW, _OH = 400, 588
 
-    def __init__(self, assistant_name="JARVIS", user_name="",
+    def __init__(self, assistant_name="ZainAI", user_name="",
                  ui_color=DEFAULT_UI_COLOR, voice="", parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -1825,7 +1851,7 @@ class CustomizeOverlay(QWidget):
         self.hide()
 
     def _save(self):
-        name = self._name_input.text().strip() or "JARVIS"
+        name = self._name_input.text().strip() or "ZainAI"
         user = self._user_input.text().strip()
         self.saved.emit(name, user, self._sel_color or DEFAULT_UI_COLOR, self._sel_voice)
         self.hide()
@@ -2195,10 +2221,10 @@ class AudioDeviceOverlay(_HudOverlay):
         self._level_seen.connect(self._on_level)
         self._test_result.connect(self._on_result)
 
-        self._in_box  = _row("MICROPHONE — what JARVIS hears you with",
+        self._in_box  = _row("MICROPHONE — what ZainAI hears you with",
                              "input", get_input_device())
         lay.addSpacing(4)
-        self._out_box = _row("SPEAKERS — what JARVIS talks through",
+        self._out_box = _row("SPEAKERS — what ZainAI talks through",
                              "output", get_output_device())
 
         # ── Output volume, beside the output device ──────────────────────────
@@ -2499,7 +2525,7 @@ class MemoryOverlay(_HudOverlay):
 
         from memory.memory_manager import all_entries_for_ui
 
-        hdr = QLabel("🧠  WHAT JARVIS REMEMBERS")
+        hdr = QLabel("🧠  WHAT ZAINAI REMEMBERS")
         hdr.setFont(QFont("Courier New", 12, QFont.Weight.Bold))
         hdr.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         self._lay.addWidget(hdr)
@@ -4058,7 +4084,7 @@ class RemoteKeyOverlay(QWidget):
         if _blocked:
             warn = _lbl(
                 "⚠  Windows is blocking incoming connections to this copy of "
-                "Python, so your phone cannot reach this page. Restart JARVIS "
+                "Python, so your phone cannot reach this page. Restart ZainAI "
                 "and accept the Windows prompt, or remove the rules named "
                 + ", ".join(sorted({n for n, _ in _blocked}))
                 + " under Windows Defender Firewall → Inbound Rules.",
@@ -4197,7 +4223,7 @@ class RemoteKeyOverlay(QWidget):
         self._qr_label.setStyleSheet(
             "color: #00ff88; background: #001a0d; border-radius: 10px;"
         )
-        self._timer_lbl.setText("Phone connected — JARVIS ready")
+        self._timer_lbl.setText("Phone connected — ZainAI ready")
         self._timer_lbl.setStyleSheet(f"color: {C.GREEN}; background: transparent;")
 
     def _refresh_key(self):
@@ -4260,7 +4286,7 @@ class MainWindow(QMainWindow):
 
         # Load customization from config
         _cfg = _read_full_config()
-        self._assistant_name: str = (_cfg.get("assistant_name") or "JARVIS").strip()
+        self._assistant_name: str = (_cfg.get("assistant_name") or "ZainAI").strip()
         _display = self._assistant_name.upper()
 
         # Apply the saved UI colour BEFORE panels/stylesheets are built
@@ -4283,6 +4309,8 @@ class MainWindow(QMainWindow):
         self.on_interrupt      = None   # callable: () -> None — stop JARVIS mid-speech
         self.on_voice_change   = None   # callable: () -> None — rebuild session with new voice
         self.on_audio_device_change = None  # callable: () -> None — reopen audio streams
+        self.on_call_start     = None   # callable: () -> None — Start Call triggered
+        self.on_call_end       = None   # callable: () -> None — End / Leave Call triggered
         self._confirm_overlay  = None   # live ConfirmBanner, if one is on screen
         self.get_plugins       = None   # callable: () -> list[dict], set by JarvisLive
         self.get_plugin_settings = None # callable: () -> list[dict] settings schemas, set by JarvisLive
@@ -4298,7 +4326,7 @@ class MainWindow(QMainWindow):
 
         central = QWidget()
         central.setStyleSheet(f"background: {C.BG};")
-        self.setCentralWidget(central)
+        self._classic_central = central
 
         root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
@@ -4499,6 +4527,47 @@ class MainWindow(QMainWindow):
         root.addLayout(body, stretch=1)
         root.addWidget(self._build_footer())
 
+        # ── Video Conference 3D Stage & Bridge ─────────────────────────────────
+        self._conf_server = None
+        if get_conference_server is not None:
+            try:
+                self._conf_server = get_conference_server()
+                self._conf_server.on_interrupt = self._do_interrupt
+                self._conf_server.on_mute_toggled = lambda m: self._set_muted(m)
+                self._conf_server.on_text_command = lambda t: self._on_bridge_text_command(t)
+                self._conf_server.on_voice_changed = lambda v: self.on_voice_change(v) if self.on_voice_change else None
+                self._conf_server.on_leave_call = self._on_conf_leave_call
+                self._conf_server.on_start_call = self._on_conf_start_call
+            except Exception as _e:
+                print(f"[Conference] Server start note: {_e}")
+
+        self._main_stack = QStackedWidget()
+        if HAVE_WEBENGINE:
+            self._conf_view = QWebEngineView()
+            if QWebEnginePage is not None:
+                _page = self._conf_view.page()
+                _conf_url = QUrl("http://127.0.0.1:8085/")
+                try:
+                    if hasattr(QWebEnginePage, "Feature") and hasattr(QWebEnginePage, "PermissionPolicy"):
+                        _page.setFeaturePermission(_conf_url, QWebEnginePage.Feature.MediaAudioCapture, QWebEnginePage.PermissionPolicy.PermissionGrantedByUser)
+                        _page.setFeaturePermission(_conf_url, QWebEnginePage.Feature.MediaVideoCapture, QWebEnginePage.PermissionPolicy.PermissionGrantedByUser)
+                        _page.setFeaturePermission(_conf_url, QWebEnginePage.Feature.MediaAudioVideoCapture, QWebEnginePage.PermissionPolicy.PermissionGrantedByUser)
+                except Exception:
+                    pass
+                _page.featurePermissionRequested.connect(
+                    lambda u, f: QTimer.singleShot(0, lambda: _page.setFeaturePermission(
+                        u, f, QWebEnginePage.PermissionPolicy.PermissionGrantedByUser
+                    ))
+                )
+            self._conf_view.setUrl(QUrl("http://127.0.0.1:8085/"))
+            self._main_stack.addWidget(self._conf_view)     # 0: Video Conference
+            self._main_stack.addWidget(central)             # 1: Classic HUD
+            self._main_stack.setCurrentIndex(0)
+        else:
+            self._main_stack.addWidget(central)
+            self._main_stack.setCurrentIndex(0)
+        self.setCentralWidget(self._main_stack)
+
         # Quick-access drawer (floating overlay, built after central widget layout is done)
         self._quick_drawer = self._build_quick_drawer()
         self._ctrl_drawer = self._build_controls_drawer()
@@ -4518,7 +4587,7 @@ class MainWindow(QMainWindow):
         self._metric_tmr.start(2000)
         self._update_metrics()
 
-        self._log_sig.connect(self._log.append_log)
+        self._log_sig.connect(self._on_log_append)
         self._state_sig.connect(self._apply_state)
         self._content_sig.connect(self._show_content)
         self._reconfig_sig.connect(self._show_setup)
@@ -4557,6 +4626,8 @@ class MainWindow(QMainWindow):
         sc_full.activated.connect(self._toggle_fullscreen)
         sc_intr = QShortcut(QKeySequence("Escape"), self)
         sc_intr.activated.connect(self._do_interrupt)
+        sc_view = QShortcut(QKeySequence("F8"), self)
+        sc_view.activated.connect(self._toggle_ui_mode)
 
     def _show_camera_frame(self, img_bytes: bytes):
         """Slot — display camera preview overlay (main thread)."""
@@ -5819,6 +5890,11 @@ class MainWindow(QMainWindow):
     def _show_content(self, title: str, text: str):
         """Slot — runs on Qt main thread. Updates and shows the content panel."""
         import time as _time
+        try:
+            if getattr(self, "_conf_server", None):
+                self._conf_server.broadcast_content(title, text)
+        except Exception:
+            pass
         # The panel opens below the head, so the head looks down at it. It is a
         # tiny thing that answers "did that land?" before you read a word.
         self.hud.glance(0.0, -0.85, hold=1.3)
@@ -6616,7 +6692,7 @@ class MainWindow(QMainWindow):
             self._customize_overlay.hide()
         cw = self.centralWidget()
         ov = CustomizeOverlay(
-            cfg.get("assistant_name", "JARVIS") or "JARVIS",
+            cfg.get("assistant_name", "ZainAI") or "ZainAI",
             cfg.get("user_name", ""),
             cfg.get("ui_color", "") or DEFAULT_UI_COLOR,
             cfg.get("voice_name", ""),
@@ -6643,7 +6719,7 @@ class MainWindow(QMainWindow):
     def _apply_name_update(self, name: str, user_name: str, ui_color: str = "",
                            voice: str = ""):
         """Update all name/theme-dependent UI elements and persist to config."""
-        self._assistant_name = name.strip() or "JARVIS"
+        self._assistant_name = name.strip() or "ZainAI"
         display = self._assistant_name.upper()
         self.setWindowTitle(f"{display} — {APP_VERSION}")
         self._title_lbl.setText(display)
@@ -6840,7 +6916,51 @@ class MainWindow(QMainWindow):
 
     # ────────────────────────────────────────────────────────────────────────────
 
+    def _toggle_ui_mode(self):
+        if hasattr(self, "_main_stack") and self._main_stack.count() > 1:
+            idx = 1 if self._main_stack.currentIndex() == 0 else 0
+            self._main_stack.setCurrentIndex(idx)
+
+    def _on_conf_leave_call(self):
+        """Conference UI → user pressed Leave/Cancel."""
+        try:
+            # Tell the backend to tear down the session
+            if getattr(self, 'on_call_end', None):
+                self.on_call_end()
+            # Broadcast sleeping state to the conference UI
+            if getattr(self, '_conf_server', None):
+                self._conf_server.broadcast_state("SLEEPING")
+        except Exception as _e:
+            print(f"[Conference] Leave call note: {_e}")
+
+    def _on_conf_start_call(self):
+        """Conference UI → user pressed Start Call."""
+        try:
+            # Tell the backend to open a Gemini session
+            if getattr(self, 'on_call_start', None):
+                self.on_call_start()
+        except Exception as _e:
+            print(f"[Conference] Start call note: {_e}")
+
+    def _on_bridge_text_command(self, txt: str):
+        self._on_log_append(f"You: {txt}")
+        if self.on_text_command:
+            threading.Thread(target=self.on_text_command, args=(txt,), daemon=True).start()
+
+    def _on_log_append(self, text: str):
+        self._log.append_log(text)
+        try:
+            if getattr(self, "_conf_server", None):
+                self._conf_server.broadcast_log(text)
+        except Exception:
+            pass
+
     def _do_interrupt(self):
+        try:
+            if getattr(self, "_conf_server", None):
+                self._conf_server.broadcast_state("LISTENING")
+        except Exception:
+            pass
         if self.on_interrupt:
             self.on_interrupt()
 
@@ -6857,12 +6977,17 @@ class MainWindow(QMainWindow):
         self._muted = muted
         self.hud.muted = muted
         self._style_mute_btn()
+        try:
+            if getattr(self, "_conf_server", None):
+                self._conf_server.broadcast_mute(muted)
+        except Exception:
+            pass
         if muted:
             self._apply_state("MUTED")
-            self._log.append_log("SYS: Microphone muted." + (f" {note}" if note else ""))
+            self._on_log_append("SYS: Microphone muted." + (f" {note}" if note else ""))
         else:
             self._apply_state("LISTENING")
-            self._log.append_log("SYS: Microphone active." + (f" {note}" if note else ""))
+            self._on_log_append("SYS: Microphone active." + (f" {note}" if note else ""))
 
     def _style_mute_btn(self):
         if self._muted:
@@ -6887,13 +7012,18 @@ class MainWindow(QMainWindow):
         txt = self._input.text().strip()
         if not txt: return
         self._input.clear()
-        self._log.append_log(f"You: {txt}")
+        self._on_log_append(f"You: {txt}")
         if self.on_text_command:
             threading.Thread(target=self.on_text_command, args=(txt,), daemon=True).start()
 
     def _apply_state(self, state: str):
         self.hud.state    = state
         self.hud.speaking = (state == "SPEAKING")
+        try:
+            if getattr(self, "_conf_server", None):
+                self._conf_server.broadcast_state(state)
+        except Exception:
+            pass
 
     def _check_config(self) -> bool:
         if not API_FILE.exists(): return False
@@ -6927,7 +7057,8 @@ class MainWindow(QMainWindow):
             self._overlay.hide()
             self._overlay = None
         self._apply_state("LISTENING")
-        self._assistant_name = _read_full_config().get("assistant_name", "JARVIS") or "JARVIS"
+        self._assistant_name = _read_full_config().get("assistant_name", "ZainAI") or "ZainAI"
+        self._log._ai_name_lc = self._assistant_name.lower()
         self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. {self._assistant_name} online.")
 
 
@@ -7000,6 +7131,22 @@ class JarvisUI:
     @on_audio_device_change.setter
     def on_audio_device_change(self, cb):
         self._win.on_audio_device_change = cb
+
+    @property
+    def on_call_start(self):
+        return self._win.on_call_start
+
+    @on_call_start.setter
+    def on_call_start(self, cb):
+        self._win.on_call_start = cb
+
+    @property
+    def on_call_end(self):
+        return self._win.on_call_end
+
+    @on_call_end.setter
+    def on_call_end(self, cb):
+        self._win.on_call_end = cb
 
     def show_confirm(self, title: str, detail: str) -> None:
         """Thread-safe: raise the irreversible-action gate. Called from action

@@ -335,9 +335,9 @@ def _load_system_prompt() -> str:
         return PROMPT_PATH.read_text(encoding="utf-8")
     except Exception:
         return (
-            "You are JARVIS, Tony Stark's AI assistant. "
-            "Be concise, direct, and always use the provided tools to complete tasks. "
-            "Never simulate or guess results — always call the appropriate tool."
+            "You are ZainAI, a warm, wise, and helpful teacher dedicated to developing students' critical thinking. "
+            "Never act as a homework machine or provide direct answers to students' questions or exercises. "
+            "Instead, guide them with Socratic questions, break problems down, and challenge them to think through to the answer."
         )
 
 _CTRL_RE = re.compile(r"<ctrl\d+>", re.IGNORECASE)
@@ -414,7 +414,7 @@ TOOL_DECLARATIONS = [
         "name": "manage_monitor",
         "description": (
             "Add, remove, or list background monitoring topics. "
-            "JARVIS checks these topics once a day and alerts the user when there is a new development. "
+            "ZainAI checks these topics once a day and alerts the user when there is a new development. "
             "Use 'add' when the user says 'monitor X', 'track X', 'follow X'. "
             "Use 'remove' when the user says 'stop monitoring X'. "
             "Use 'list' when the user asks what is being monitored. "
@@ -440,7 +440,7 @@ TOOL_DECLARATIONS = [
         "description": (
             "Shuts down the assistant completely. "
             "Call this when the user expresses intent to end the conversation, "
-            "close the assistant, say goodbye, or stop Jarvis. "
+            "close the assistant, say goodbye, or stop ZainAI. "
             "The user can say this in ANY language."
         ),
         "parameters": {
@@ -547,6 +547,13 @@ class _ReconnectSignal(Exception):
         self.keep_context = keep_context
 
 
+class _CallEndedSignal(Exception):
+    """Raised inside the session TaskGroup when the user presses Leave/Cancel.
+    The run loop checks for this and returns to the standby/dormant state
+    instead of auto-reconnecting."""
+    pass
+
+
 def _is_reconnect_signal(exc: BaseException) -> bool:
     """True if `exc` is a _ReconnectSignal, or a(n) (Base)ExceptionGroup that
     wraps one — TaskGroup bundles child exceptions into a group."""
@@ -554,6 +561,15 @@ def _is_reconnect_signal(exc: BaseException) -> bool:
         return True
     if isinstance(exc, BaseExceptionGroup):
         return any(_is_reconnect_signal(sub) for sub in exc.exceptions)
+    return False
+
+
+def _is_call_ended_signal(exc: BaseException) -> bool:
+    """True if `exc` is a _CallEndedSignal, or an ExceptionGroup that wraps one."""
+    if isinstance(exc, _CallEndedSignal):
+        return True
+    if isinstance(exc, BaseExceptionGroup):
+        return any(_is_call_ended_signal(sub) for sub in exc.exceptions)
     return False
 
 
@@ -632,8 +648,17 @@ class JarvisLive:
         self.ui.on_interrupt      = self.interrupt
         self.ui.on_voice_change   = self._on_voice_change     # voice picker → rebuild session
         self.ui.on_audio_device_change = self._on_audio_device_change
+        self.ui.on_call_start     = self._trigger_call_start  # conference Start Call button
+        self.ui.on_call_end       = self._trigger_call_end    # conference Leave / Cancel button
         self._reconnect_event: asyncio.Event | None = None
         self._reconnect_keep = True   # False → next rebuild drops the resumption handle
+
+        # ── Call gating ───────────────────────────────────────────────────
+        # The system stays dormant (standby / sleeping call screen) until
+        # the user clicks Start Call. The gate is set by the conference
+        # UI's start_call action and cleared when the call ends.
+        self._call_gate:  asyncio.Event | None = None   # created in run()
+        self._call_ended: asyncio.Event | None = None    # created in run()
 
         # ── Session resumption ─────────────────────────────────────────
         # The server issues a resumption handle every few seconds and reissues
@@ -826,6 +851,28 @@ class JarvisLive:
             asyncio.run_coroutine_threadsafe(_say(), loop)
         except Exception as e:
             print(f"[PluginSay] {e}")
+    # ── call lifecycle (start / end from conference UI) ─────────────────────
+
+    def _trigger_call_start(self) -> None:
+        """Called from UI thread when the user clicks Start Call."""
+        loop = getattr(self, "_loop", None)
+        if loop and self._call_gate is not None:
+            loop.call_soon_threadsafe(self._call_gate.set)
+        print("[JARVIS] Call started by user.")
+
+    def _trigger_call_end(self) -> None:
+        """Called from UI thread when the user ends/leaves the call."""
+        loop = getattr(self, "_loop", None)
+        if loop and self._call_ended is not None:
+            loop.call_soon_threadsafe(self._call_ended.set)
+        print("[JARVIS] Call ended by user.")
+
+    async def _watch_call_ended(self) -> None:
+        """Wait for the leave-call event, then tear down the live session."""
+        await self._call_ended.wait()
+        # Raise a dedicated signal — the outer except block recognises it
+        # and sends the run loop to the standby gate instead of reconnecting.
+        raise _CallEndedSignal()
 
     # ── stall watchdog ───────────────────────────────────────────────────────
 
@@ -1086,10 +1133,10 @@ class JarvisLive:
         # Load customization from config
         try:
             _cfg = json.loads(open(API_CONFIG_PATH, encoding="utf-8").read())
-            self._asst_name = (_cfg.get("assistant_name") or "JARVIS").strip()
+            self._asst_name = (_cfg.get("assistant_name") or "ZainAI").strip()
             _user_name = (_cfg.get("user_name") or "").strip()
         except Exception:
-            self._asst_name = "JARVIS"
+            self._asst_name = "ZainAI"
             _user_name = ""
 
         memory     = load_memory()
@@ -1105,21 +1152,12 @@ class JarvisLive:
         )
 
         # Identity injection — overrides any hardcoded name in prompt.txt
-        # Address form is a property of the language being spoken, so it is
-        # stated as a principle rather than a two-language lookup — the model
-        # already knows the respectful register of whatever language it is in.
-        _addr = (f"ADDRESS: Always call the user '{_user_name}'."
+        _addr = (f"STUDENT: The student's name is '{_user_name}'. Address them warmly by their name."
                  if _user_name
-                 else 'ADDRESS: Address the user with the ordinary respectful form '
-                      'for a superior in the language you are currently speaking — '
-                      '"sir" in English, its everyday equivalent in any other '
-                      'language. Never an archaic or aristocratic form, and never '
-                      'the form from a different language than the one you are '
-                      'speaking in this sentence.')
+                 else "STUDENT: You do not know the student's name yet. Warmly ask for their name when welcoming them, and use their name once they share it.")
         identity_ctx = (
-            f"[IDENTITY]\n"
-            f"Your name is {self._asst_name}. "
-            f"Always refer to yourself as {self._asst_name}.\n"
+            f"[IDENTITY & ROLE]\n"
+            f"Your name is {self._asst_name}. You are a warm, helpful teacher and critical thinking expert.\n"
             f"{_addr}\n\n"
         )
 
@@ -1896,16 +1934,13 @@ class JarvisLive:
             stream.stop()
             stream.close()
 
-    # ── Morning briefing ────────────────────────────────────────────────────────
+    # ── Startup greeting ────────────────────────────────────────────────────────
 
     async def _send_startup_briefing(self) -> None:
         """
-        Two-phase briefing optimized for speed:
-          Phase 1 — instant greeting (no tools) → speech starts in <1s
-          Phase 2 — news pre-fetched in a background thread while Phase 1 plays,
-                    delivered as ready text (no Gemini tool-call round-trip) and
-                    shown on the UI content panel. Waits for turn_complete event
-                    instead of a fixed sleep so there is no unnecessary gap.
+        Startup greeting for the teacher & critical thinking persona.
+        Welcomes the student warmly and asks for their name to begin the session.
+        Does not fetch or start with news.
         """
         memory   = load_memory()
         identity = memory.get("identity", {})
@@ -1916,44 +1951,32 @@ class JarvisLive:
 
         lang = _val("language")
         name = _val("name")
-        time_str = datetime.now().strftime("%H:%M")
-
-        # Start fetching news immediately — runs in parallel while phase 1 plays
-        loop = asyncio.get_event_loop()
-        news_future = loop.run_in_executor(None, _fetch_news_sync, "top world news today")
 
         await asyncio.sleep(0.3)
         if not self.session:
             return
 
-        # ── Phase 1: instant greeting ─────────────────────────────────────────
-        # The briefing fires before the user has said anything, so the
-        # remembered language is the only signal there is. It is a starting
-        # point, not a setting: the moment they reply, their language wins.
         lang_clause = (f" Speak this greeting in {lang}, then follow the "
-                       f"user's own language from their first reply onward."
+                       f"student's own language from their first reply onward."
                        if lang else "")
-        name_clause = f" Address the user as {name}." if name else ""
 
-        # Inject last session context if available — pop removes it so it's never repeated
-        last = await asyncio.to_thread(pop_last_session)
-        session_clause = ""
-        if last:
-            try:
-                _delta = (datetime.now() - datetime.strptime(last["date"], "%Y-%m-%d")).days
-                _when  = "earlier today" if _delta == 0 else ("yesterday" if _delta == 1 else f"{_delta} days ago")
-            except Exception:
-                _when = "last time"
-            session_clause = (
-                f" Also briefly and naturally mention that {_when}: {last['summary']}"
+        # Ask for their name with a warm, encouraging welcome
+        if name:
+            p1 = (
+                f"[STARTUP_WELCOME] Greet the student with a warm, encouraging welcome as their teacher. "
+                f"Acknowledge them warmly (you recall their name may be {name}, but confirm or ask how they would like to be called today), "
+                f"and invite them to share what question, concept, or problem they want to explore and think through together. "
+                f"Keep it friendly, enthusiastic, and under 2 short sentences. "
+                f"Do NOT mention news or headlines. Do NOT call any tools.{lang_clause}"
+            )
+        else:
+            p1 = (
+                f"[STARTUP_WELCOME] Greet the student with a warm, encouraging welcome as their teacher and critical thinking mentor. "
+                f"Warmly ask for their name so you can get to know them, and invite them to share what topic or question they'd like to explore today. "
+                f"Keep it friendly, enthusiastic, and under 2 short sentences. "
+                f"Do NOT mention news or headlines. Do NOT call any tools.{lang_clause}"
             )
 
-        p1 = (
-            f"Greet the user warmly, mention it is {time_str}, and say you are fetching today's news now.{session_clause} "
-            f"Keep it to 2 short sentences max. Do not call any tools.{lang_clause}{name_clause}"
-        )
-
-        # Clear the turn-done event so we can wait for Phase 1 to finish
         if self._turn_done_event:
             self._turn_done_event.clear()
 
@@ -1961,76 +1984,7 @@ class JarvisLive:
             turns={"role": "user", "parts": [{"text": p1}]},
             turn_complete=True,
         )
-        print("[JARVIS] Briefing phase 1 (greeting) sent.")
-
-        # ── Phase 2: fire as soon as Phase 1 audio is done ───────────────────
-        async def _deliver_news():
-            try:
-                lang_str = (f" Speak in {lang} unless the user has since "
-                            f"spoken another language, in which case use theirs."
-                            if lang else "")
-
-                # Wait for news fetch (already running) and Phase 1 turn-complete
-                # in parallel — whichever takes longer determines the wait time
-                news_done   = asyncio.wrap_future(news_future)
-                turn_waited = False
-                if self._turn_done_event:
-                    try:
-                        await asyncio.wait_for(self._turn_done_event.wait(), timeout=6.0)
-                        turn_waited = True
-                    except asyncio.TimeoutError:
-                        pass
-
-                # Extra buffer: turn_complete fires when Gemini finishes *generating*
-                # Phase 1, but audio may still be playing.  Waiting a beat here
-                # prevents Phase 2 audio from arriving while Phase 1 is mid-sentence
-                # (which sounds like a "repeated first response" to the user).
-                if turn_waited:
-                    await asyncio.sleep(0.8)
-                else:
-                    await asyncio.sleep(1.0)
-
-                try:
-                    news_text = await asyncio.wait_for(news_done, timeout=8.0)
-                except Exception as e:
-                    self.ui.write_log(f"SYS: News fetch timed out/failed: {e!r}")
-                    news_text = ""
-
-                if not self.session:
-                    return
-
-                failed = (not news_text) or news_text.startswith(
-                    ("No news found", "Search failed", "Please provide")
-                )
-                if not failed:
-                    # Show on UI content panel immediately
-                    self.ui.show_content("NEWS — top world news today", news_text)
-
-                    p2 = (
-                        f"[BRIEFING] Here are today's top news headlines:\n{news_text}\n\n"
-                        "Pick ONE headline, summarise it in one sentence, then say the full list "
-                        f"is displayed on screen. Do not call any tools.{lang_str}"
-                    )
-                else:
-                    self.ui.write_log(
-                        f"SYS: News unavailable — backend returned: {news_text[:120]!r}"
-                    )
-                    p2 = (
-                        "News headlines could not be fetched right now. "
-                        f"Let the user know briefly.{lang_str}"
-                    )
-
-                await self.session.send_client_content(
-                    turns={"role": "user", "parts": [{"text": p2}]},
-                    turn_complete=True,
-                )
-                print("[JARVIS] Briefing phase 2 (news) sent.")
-            except Exception as e:
-                print(f"[Briefing] Phase 2 error: {e}")
-                print(f"[JARVIS] Briefing phase 2 failed: {e}")
-                self.ui.write_log("SYS: Could not fetch the news for the briefing.")
-
-        asyncio.create_task(_deliver_news())
+        print("[JARVIS] Warm teacher welcome sent.")
 
     # ── Session memory ──────────────────────────────────────────────────────────
 
@@ -2340,6 +2294,8 @@ class JarvisLive:
     async def run(self):
         self._loop = asyncio.get_event_loop()
         self._reconnect_event = asyncio.Event()
+        self._call_gate  = asyncio.Event()   # cleared = stay dormant
+        self._call_ended = asyncio.Event()   # set = force disconnect
 
         # ── Wire the shared core services to the interface ───────────────────
         # The confirmation gate is useless without a way to ask, and a memory
@@ -2374,6 +2330,17 @@ class JarvisLive:
             self._dashboard = None
 
         while True:
+            # ── Wait for the user to click Start Call ───────────────────────
+            # Stay completely dormant (sleeping / standby screen) until the
+            # conference UI fires the start_call action.  This guarantees
+            # zero network activity and zero audio capture at launch.
+            if not self._call_gate.is_set():
+                self.ui.set_state("SLEEPING")
+                print("[JARVIS] Standby — waiting for Start Call...")
+                if self._dashboard:
+                    await self._dashboard.broadcast({"type": "status", "state": "sleeping"})
+                await self._call_gate.wait()
+            self._call_ended.clear()
             try:
                 print("[JARVIS] Connecting...")
                 self.ui.set_state("THINKING")
@@ -2445,11 +2412,11 @@ class JarvisLive:
                         self._ensure_wake_detector()
                         self._awake = False
                         self.ui.set_state("SLEEPING")
-                        self.ui.write_log("SYS: JARVIS online — sleeping. Say 'Hey Jarvis' to wake me.")
+                        self.ui.write_log(f"SYS: {self._asst_name} online — sleeping. Say 'Hey Jarvis' to wake me.")
                     else:
                         self._awake = True
                         self.ui.set_state("LISTENING")
-                        self.ui.write_log("SYS: JARVIS online.")
+                        self.ui.write_log(f"SYS: {self._asst_name} online.")
 
                     # What this machine will not permit, said once, on screen.
                     #
@@ -2483,6 +2450,7 @@ class JarvisLive:
                     tg.create_task(self._run_background_monitor())
                     tg.create_task(self._run_proactive_mode())
                     tg.create_task(self._run_sleep_watch())
+                    tg.create_task(self._watch_call_ended())
                     if self._dashboard:
                         tg.create_task(self._relay_phone_audio())
 
@@ -2510,6 +2478,22 @@ class JarvisLive:
                 # externally, which `except Exception` would miss, letting the
                 # exception escape the while-loop and causing asyncio.run() to
                 # start shutdown — resulting in "executor after shutdown" errors).
+                # Call ended by user — return cleanly to dormant standby
+                if _is_call_ended_signal(e) or (self._call_ended is not None and self._call_ended.is_set()):
+                    self._call_gate.clear()
+                    if self._call_ended is not None:
+                        self._call_ended.clear()
+                    self._resume_handle = None
+                    self.set_speaking(False)
+                    self.ui.set_state("SLEEPING")
+                    print("[JARVIS] Call ended by user — returning to standby.")
+                    try:
+                        if getattr(self.ui, '_conf_server', None):
+                            self.ui._conf_server.broadcast_state("SLEEPING")
+                    except Exception:
+                        pass
+                    continue
+
                 # Voluntary reconnect (voice change) — not an error. Rebuild the
                 # session immediately with no backoff and no scary logs.
                 if _is_reconnect_signal(e):
@@ -2626,6 +2610,20 @@ class JarvisLive:
 
             if self._dashboard:
                 await self._dashboard.broadcast({"type": "status", "state": "sleeping"})
+
+            # If the call was ended by the user (leave button), return to
+            # dormant standby — don't auto-reconnect.
+            if self._call_ended.is_set():
+                self._call_gate.clear()    # require a new Start Call
+                self._resume_handle = None # fresh conversation next time
+                print("[JARVIS] Call ended — returning to standby.")
+                # Broadcast sleeping to conference UI so it shows the call screen
+                try:
+                    if getattr(self.ui, '_conf_server', None):
+                        self.ui._conf_server.broadcast_state("SLEEPING")
+                except Exception:
+                    pass
+                continue   # loops back to _call_gate.wait()
 
             delay = getattr(self, "_conn_backoff", 3)
             print(f"[JARVIS] Reconnecting in {delay}s...")

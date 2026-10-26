@@ -1,0 +1,2732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZainAI — Video Conference</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070a12;
+      --card-bg: rgba(15, 23, 42, 0.75);
+      --card-border: rgba(255, 255, 255, 0.09);
+      --glass-blur: 28px;
+      --primary: #00d2ff;
+      --primary-glow: rgba(0, 210, 255, 0.35);
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.4);
+      --amber: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.35);
+      --rose: #f43f5e;
+      --rose-glow: rgba(244, 63, 94, 0.45);
+      --text: #f8fafc;
+      --text-dim: #94a3b8;
+      --text-muted: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+    }
+
+    /* Video Conference Stage */
+    #conference-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at 50% 25%, #131b2e 0%, #080d18 65%, #04060a 100%);
+    }
+
+    /* Top Bar */
+    .top-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 40;
+      background: linear-gradient(180deg, rgba(7, 10, 18, 0.9) 0%, rgba(7, 10, 18, 0) 100%);
+      pointer-events: none;
+    }
+
+    .top-bar > * {
+      pointer-events: auto;
+    }
+
+    .meeting-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(244, 63, 94, 0.15);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+      color: #fda4af;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--rose);
+      box-shadow: 0 0 10px var(--rose);
+      animation: pulse-dot 1.8s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.5; }
+    }
+
+    .meeting-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #f8fafc;
+      letter-spacing: -0.2px;
+    }
+
+    .timer-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-dim);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 24px;
+      font-size: 12px;
+      font-weight: 600;
+      backdrop-filter: blur(var(--glass-blur));
+      border: 1px solid var(--card-border);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .status-chip.listening {
+      background: rgba(0, 210, 255, 0.12);
+      border-color: rgba(0, 210, 255, 0.3);
+      color: #7dd3fc;
+    }
+    .status-chip.speaking {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.35);
+      color: #6ee7b7;
+      box-shadow: 0 0 20px var(--emerald-glow);
+    }
+    .status-chip.thinking {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.35);
+      color: #fcd34d;
+    }
+    .status-chip.sleeping {
+      background: rgba(100, 116, 139, 0.15);
+      border-color: rgba(100, 116, 139, 0.3);
+      color: #94a3b8;
+    }
+
+    .pulse-ring {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* Main Video Stage */
+    #stage-area {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #three-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+    }
+
+    /* Vignette & studio ambient lighting overlay */
+    .stage-vignette {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 15;
+      background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(7, 10, 18, 0.5) 80%, rgba(4, 6, 10, 0.95) 100%);
+    }
+
+    /* Character Overlay Badge */
+    .character-badge {
+      position: absolute;
+      bottom: 96px;
+      left: 28px;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .char-avatar-ring {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      color: #fff;
+    }
+
+    .char-avatar-ring::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--primary);
+      animation: spin 3s linear infinite;
+    }
+
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    .char-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .char-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .char-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Voice visualizer inside badge */
+    .voice-visualizer {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      height: 18px;
+      margin-left: 6px;
+    }
+
+    .v-bar {
+      width: 3px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--primary);
+      transition: height 0.08s ease;
+    }
+
+    /* Stage Participant Tiles & Spotlight Switching */
+    .participant-tile {
+      position: absolute;
+      overflow: hidden;
+      transition: all 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Main Stage Mode */
+    .participant-tile.main-tile {
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      border-radius: 0;
+      border: none;
+      box-shadow: none;
+      cursor: default;
+    }
+
+    /* PIP Mode (Floating Tile on Top-Right) */
+    .participant-tile.pip-tile {
+      top: 80px;
+      right: 28px;
+      width: 230px;
+      height: 150px;
+      border-radius: 18px;
+      z-index: 35;
+      background: rgba(18, 24, 38, 0.92);
+      backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 16px 45px rgba(0, 0, 0, 0.65), 0 0 1px 1px rgba(255, 255, 255, 0.1);
+      cursor: pointer;
+    }
+
+    .participant-tile.pip-tile:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 24px rgba(0, 210, 255, 0.25);
+    }
+
+    .pip-swap-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0, 0, 0, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #38bdf8;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 8px;
+      opacity: 0;
+      transform: translateY(-4px);
+      transition: all 0.2s ease;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      backdrop-filter: blur(8px);
+      z-index: 5;
+    }
+
+    .participant-tile.pip-tile:hover .pip-swap-badge {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .participant-tile.main-tile .pip-swap-badge {
+      display: none;
+    }
+
+    /* Canvas inside ZainAI Tile */
+    #tile-ai canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+    /* Video inside Host Tile */
+    #user-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      background: #020617;
+      display: none;
+    }
+
+    /* Host Fallback Avatar */
+    .self-avatar-fallback {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #1e293b 0%, #080d1a 100%);
+      gap: 12px;
+    }
+
+    .self-avatar-circle {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      color: white;
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.35);
+      transition: all 0.3s ease;
+    }
+
+    /* Scale up avatar circle when Host is in Main Stage */
+    .participant-tile.main-tile .self-avatar-circle {
+      width: 110px;
+      height: 110px;
+      font-size: 42px;
+      box-shadow: 0 12px 40px rgba(99, 102, 241, 0.45);
+    }
+
+    .host-cam-off-hint {
+      font-size: 13px;
+      color: var(--text-dim);
+      font-weight: 500;
+      display: none;
+    }
+
+    .participant-tile.main-tile .host-cam-off-hint {
+      display: block;
+    }
+
+    /* Badges positioned for both modes */
+    .self-name-label {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      z-index: 20;
+    }
+
+    .participant-tile.main-tile .character-badge,
+    .participant-tile.main-tile .self-name-label {
+      position: absolute;
+      bottom: 96px;
+      left: 28px;
+    }
+
+    .participant-tile.pip-tile .character-badge {
+      position: absolute;
+      bottom: 8px;
+      left: 10px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      gap: 6px;
+    }
+
+    .participant-tile.pip-tile .char-avatar-ring {
+      width: 22px;
+      height: 22px;
+      font-size: 11px;
+    }
+
+    .participant-tile.pip-tile .char-sub {
+      display: none;
+    }
+
+    .participant-tile.pip-tile .char-name span {
+      font-size: 11px;
+    }
+
+    .participant-tile.pip-tile .self-name-label {
+      position: absolute;
+      bottom: 8px;
+      left: 10px;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 8px;
+      gap: 4px;
+    }
+
+    /* Camera Button Active vs Off in Dock */
+    .dock-btn.cam-btn.active {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #34d399;
+    }
+
+    .dock-btn.cam-btn.off {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+
+    /* Bottom Conference Dock (Google Meet / Zoom style) */
+    .conference-dock {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 45;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 18px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 40px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 1px 1px rgba(255, 255, 255, 0.05);
+    }
+
+    .dock-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 52px;
+      height: 52px;
+      padding: 0 14px;
+      border-radius: 26px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(30, 41, 59, 0.7);
+      color: #e2e8f0;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    .dock-btn:hover {
+      background: rgba(51, 65, 85, 0.9);
+      color: #fff;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .dock-btn:active {
+      transform: translateY(0);
+    }
+
+    .dock-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .dock-btn .btn-label {
+      font-size: 10px;
+      font-weight: 600;
+      margin-top: 3px;
+      letter-spacing: 0.2px;
+    }
+
+    /* Mute Button Active vs Muted */
+    .dock-btn.mute-btn.active {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.35);
+      color: #34d399;
+    }
+
+    .dock-btn.mute-btn.muted {
+      background: #e11d48;
+      border-color: #f43f5e;
+      color: #ffffff;
+      box-shadow: 0 0 24px var(--rose-glow);
+    }
+    .dock-btn.mute-btn.muted:hover {
+      background: #be123c;
+    }
+
+    /* INTERRUPT Button */
+    .dock-btn.interrupt-btn {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+      padding: 0 18px;
+    }
+
+    .dock-btn.interrupt-btn:hover {
+      background: #d97706;
+      border-color: #f59e0b;
+      color: #ffffff;
+      box-shadow: 0 0 24px var(--amber-glow);
+    }
+
+    /* Leave / End Call Button */
+    .dock-btn.leave-btn {
+      background: #dc2626;
+      border-color: #ef4444;
+      color: white;
+      min-width: 54px;
+      border-radius: 27px;
+    }
+
+    .dock-btn.leave-btn:hover {
+      background: #b91c1c;
+      box-shadow: 0 0 24px rgba(220, 38, 38, 0.5);
+    }
+
+    /* Dock Divider */
+    .dock-divider {
+      width: 1px;
+      height: 28px;
+      background: rgba(255, 255, 255, 0.12);
+      margin: 0 4px;
+    }
+
+    /* Side Drawer (Chat & Activity) */
+    .chat-drawer {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      bottom: 16px;
+      width: 360px;
+      border-radius: 20px;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(32px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(390px);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .chat-drawer.open {
+      transform: translateX(0);
+    }
+
+    .drawer-header {
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .drawer-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .drawer-close {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .drawer-close:hover {
+      color: white;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .drawer-body {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .drawer-body::-webkit-scrollbar {
+      width: 5px;
+    }
+    .drawer-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+
+    .chat-msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 88%;
+      animation: msg-slide 0.25s ease-out;
+    }
+
+    @keyframes msg-slide {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .chat-msg.user {
+      align-self: flex-end;
+    }
+
+    .chat-msg.assistant {
+      align-self: flex-start;
+    }
+
+    .chat-msg.system {
+      align-self: center;
+      max-width: 95%;
+    }
+
+    .msg-sender {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      padding: 0 4px;
+    }
+
+    .msg-bubble {
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 13px;
+      line-height: 1.45;
+      word-break: break-word;
+      user-select: text;
+    }
+
+    .chat-msg.user .msg-bubble {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-msg.assistant .msg-bubble {
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #f1f5f9;
+      border-bottom-left-radius: 4px;
+    }
+
+    .chat-msg.system .msg-bubble {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px dashed rgba(255, 255, 255, 0.15);
+      color: #94a3b8;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      text-align: center;
+      padding: 6px 12px;
+    }
+
+    .drawer-footer {
+      padding: 14px 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .input-form {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 4px 6px 4px 14px;
+      transition: border-color 0.2s;
+    }
+
+    .input-form:focus-within {
+      border-color: var(--primary);
+    }
+
+    .chat-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #f8fafc;
+      font-family: inherit;
+      font-size: 13px;
+    }
+
+    .chat-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .send-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--primary);
+      border: none;
+      color: #04101e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+
+    .send-btn:hover {
+      transform: scale(1.05);
+    }
+
+    /* Settings Modal */
+    .modal-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      width: 440px;
+      background: rgba(18, 24, 38, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 18px;
+      color: #f8fafc;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .form-select {
+      width: 100%;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: #f8fafc;
+      font-family: inherit;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .form-switch {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .switch-label {
+      font-size: 13px;
+      color: #f1f5f9;
+    }
+
+    .switch-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Loading Screen */
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 90;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      transition: opacity 0.5s ease;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(0, 210, 255, 0.15);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .loading-text {
+      font-size: 14px;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Calling & Sleeping Screen Overlay ── */
+    #call-screen-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 75;
+      background: radial-gradient(ellipse at 50% 40%, rgba(15, 23, 42, 0.96) 0%, rgba(4, 7, 14, 0.99) 100%);
+      backdrop-filter: blur(36px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #call-screen-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(1.04);
+    }
+
+    .call-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      max-width: 440px;
+      width: 90%;
+      padding: 44px 32px;
+      border-radius: 28px;
+      background: rgba(18, 25, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.65), 0 0 40px rgba(14, 165, 233, 0.12);
+      backdrop-filter: blur(20px);
+      position: relative;
+    }
+
+    .avatar-ring-container {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .call-avatar-circle {
+      width: 104px;
+      height: 104px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 42px;
+      font-weight: 800;
+      color: #fff;
+      box-shadow: 0 10px 35px rgba(2, 132, 199, 0.5);
+      position: relative;
+      z-index: 3;
+      transition: transform 0.3s ease;
+    }
+
+    /* Animated Concentric Radar Pulse for Ringing */
+    .ring-pulse {
+      position: absolute;
+      border-radius: 50%;
+      border: 2px solid rgba(14, 165, 233, 0.4);
+      opacity: 0;
+      pointer-events: none;
+      inset: 0;
+    }
+
+    .call-overlay.calling .ring-pulse {
+      animation: ring-ripple 2.4s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+    }
+
+    .call-overlay.calling .ring-pulse.r1 {
+      animation-delay: 0s;
+    }
+    .call-overlay.calling .ring-pulse.r2 {
+      animation-delay: 0.8s;
+    }
+    .call-overlay.calling .ring-pulse.r3 {
+      animation-delay: 1.6s;
+    }
+
+    @keyframes ring-ripple {
+      0% {
+        transform: scale(0.7);
+        opacity: 0.85;
+        border-color: rgba(56, 189, 248, 0.8);
+      }
+      50% {
+        opacity: 0.4;
+      }
+      100% {
+        transform: scale(2.2);
+        opacity: 0;
+        border-color: rgba(14, 165, 233, 0);
+      }
+    }
+
+    .call-title {
+      font-size: 26px;
+      font-weight: 800;
+      color: #f8fafc;
+      letter-spacing: -0.5px;
+      margin-bottom: 4px;
+    }
+
+    .call-subtitle {
+      font-size: 13px;
+      color: var(--text-dim);
+      display: block;
+      margin-bottom: 16px;
+    }
+
+    .call-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      background: rgba(100, 116, 139, 0.2);
+      border: 1px solid rgba(100, 116, 139, 0.35);
+      color: #94a3b8;
+      margin-bottom: 14px;
+      transition: all 0.3s ease;
+    }
+
+    .call-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .call-overlay.calling .call-status-pill {
+      background: rgba(14, 165, 233, 0.2);
+      border-color: rgba(14, 165, 233, 0.5);
+      color: #38bdf8;
+      box-shadow: 0 0 20px rgba(14, 165, 233, 0.3);
+    }
+    .call-overlay.calling .call-status-dot {
+      animation: pulse-dot 1s ease-in-out infinite alternate;
+    }
+
+    .call-overlay.connected .call-status-pill {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: rgba(16, 185, 129, 0.5);
+      color: #34d399;
+    }
+
+    @keyframes pulse-dot {
+      from { transform: scale(0.8); opacity: 0.6; }
+      to { transform: scale(1.3); opacity: 1; }
+    }
+
+    .call-desc {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.5;
+      margin-bottom: 28px;
+      min-height: 38px;
+    }
+
+    /* Buttons */
+    .call-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .call-act-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      outline: none;
+      font-family: inherit;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .call-act-btn:hover {
+      transform: translateY(-3px) scale(1.04);
+    }
+    .call-act-btn:active {
+      transform: translateY(0) scale(0.96);
+    }
+
+    .call-act-btn .act-icon-wrap {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      transition: all 0.25s ease;
+    }
+
+    .call-act-btn.start-call .act-icon-wrap {
+      background: linear-gradient(135deg, #10b981, #059669);
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.15);
+      animation: call-pulse 2s infinite;
+    }
+
+    .call-act-btn.start-call:hover .act-icon-wrap {
+      box-shadow: 0 14px 40px rgba(16, 185, 129, 0.65), 0 0 25px rgba(16, 185, 129, 0.4);
+    }
+
+    @keyframes call-pulse {
+      0%, 100% { box-shadow: 0 10px 30px rgba(16, 185, 129, 0.45); }
+      50% { box-shadow: 0 12px 40px rgba(16, 185, 129, 0.75), 0 0 30px rgba(16, 185, 129, 0.5); }
+    }
+
+    .call-act-btn.cancel-call .act-icon-wrap {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      box-shadow: 0 10px 30px rgba(239, 68, 68, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.15);
+    }
+
+    .call-act-btn.cancel-call:hover .act-icon-wrap {
+      box-shadow: 0 14px 40px rgba(239, 68, 68, 0.65), 0 0 25px rgba(239, 68, 68, 0.4);
+    }
+
+    .call-act-btn svg {
+      width: 28px;
+      height: 28px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .call-act-btn .act-btn-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f1f5f9;
+      letter-spacing: 0.2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="conference-container">
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loading-msg">Connecting to 3D Conference Stage...</div>
+    </div>
+
+    <!-- Calling & Standby Screen Overlay (Starts with calling button, rings till connected) -->
+    <div id="call-screen-overlay" class="call-overlay standby">
+      <div class="call-card">
+        <!-- Concentric Pulsing Radar Rings for Ringing -->
+        <div class="avatar-ring-container">
+          <div class="ring-pulse r1"></div>
+          <div class="ring-pulse r2"></div>
+          <div class="ring-pulse r3"></div>
+          <div class="call-avatar-circle">
+            <span class="call-avatar-initial">Z</span>
+          </div>
+        </div>
+
+        <div class="call-info">
+          <h2 class="call-title">ZainAI</h2>
+          <span class="call-subtitle">Mark-LVI Autonomous Assistant</span>
+          <div class="call-status-pill" id="call-status-pill">
+            <span class="call-status-dot"></span>
+            <span id="call-status-text">Standby Mode</span>
+          </div>
+          <p class="call-desc" id="call-desc">Click the button below to initiate a live audio-visual call with ZainAI.</p>
+        </div>
+
+        <!-- Action Buttons: Call vs Cancel -->
+        <div class="call-actions">
+          <!-- Button 1: Start Call (visible in Standby / Sleeping mode) -->
+          <button id="btn-start-call" class="call-act-btn start-call" title="Start Call with ZainAI">
+            <div class="act-icon-wrap">
+              <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </div>
+            <span class="act-btn-label">Start Call</span>
+          </button>
+
+          <!-- Button 2: Cancel Call (visible while calling / ringing) -->
+          <button id="btn-cancel-call" class="call-act-btn cancel-call" title="Cancel Call / Sleep" style="display: none;">
+            <div class="act-icon-wrap">
+              <svg viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/></svg>
+            </div>
+            <span class="act-btn-label">Cancel</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="meeting-info">
+        <span class="live-badge"><span class="live-dot"></span> LIVE CALL</span>
+        <span class="meeting-title">ZainAI Conference Room</span>
+        <span class="timer-badge" id="call-timer">00:00:00</span>
+      </div>
+
+      <div class="top-actions">
+        <div class="status-chip listening" id="status-chip">
+          <span class="pulse-ring"></span>
+          <span id="status-text">LISTENING</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Stage Area with Dynamic Spotlight / PIP Swapping -->
+    <main id="stage-area">
+      <!-- Participant 1: ZainAI 3D Stage -->
+      <div id="tile-ai" class="participant-tile main-tile" title="Click to spotlight ZainAI">
+        <canvas id="three-canvas"></canvas>
+        <div class="stage-vignette"></div>
+
+        <!-- Character Info Overlay -->
+        <div class="character-badge" id="ai-badge">
+          <div class="char-avatar-ring">Z</div>
+          <div class="char-text">
+            <div class="char-name">
+              <span>ZainAI</span>
+              <div class="voice-visualizer" id="ai-voice-bars">
+                <span class="v-bar"></span>
+                <span class="v-bar"></span>
+                <span class="v-bar"></span>
+                <span class="v-bar"></span>
+              </div>
+            </div>
+            <span class="char-sub">Mark-LVI Autonomous Assistant</span>
+          </div>
+        </div>
+
+        <div class="pip-swap-badge">⇄ Click to Spotlight</div>
+      </div>
+
+      <!-- Participant 2: Host (Camera / Profile) -->
+      <div id="tile-host" class="participant-tile pip-tile" title="Click to spotlight Host">
+        <video id="user-video" autoplay playsinline muted></video>
+        <div class="self-avatar-fallback" id="self-fallback">
+          <div class="self-avatar-circle">YOU</div>
+          <div class="host-cam-off-hint" id="host-cam-off-hint">Camera is off • Click Camera button in dock to turn on</div>
+        </div>
+
+        <div class="self-name-label" id="host-name-label">
+          <span class="self-mic-icon" id="self-mic-indicator">🎙️</span>
+          <span id="host-label-text">You (Host)</span>
+        </div>
+
+        <div class="pip-swap-badge">⇄ Click to Spotlight</div>
+      </div>
+    </main>
+
+    <!-- Bottom Conference Dock -->
+    <footer class="conference-dock">
+      <!-- MUTE / UNMUTE -->
+      <button class="dock-btn mute-btn active" id="btn-mute" title="Toggle Microphone (M / F4)">
+        <svg id="icon-mic-on" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <svg id="icon-mic-off" style="display:none;" viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <span class="btn-label" id="lbl-mute">Mute</span>
+      </button>
+
+      <!-- INTERRUPT -->
+      <button class="dock-btn interrupt-btn" id="btn-interrupt" title="Interrupt AI Speaking (Esc)">
+        <svg viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 13"/></svg>
+        <span class="btn-label">Interrupt</span>
+      </button>
+
+      <div class="dock-divider"></div>
+
+      <!-- CAMERA TOGGLE -->
+      <button class="dock-btn cam-btn off" id="btn-camera" title="Toggle Camera (V)">
+        <svg id="icon-cam-on" style="display:none;" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        <svg id="icon-cam-off" viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 15.5V7l-7 5"/><path d="M15.65 15.65A2 2 0 0 1 14 16H3a2 2 0 0 1-2-2V7c0-.6.27-1.15.7-1.53"/></svg>
+        <span class="btn-label" id="lbl-camera">Cam Off</span>
+      </button>
+
+      <!-- SCREEN SHARE / VISION -->
+      <button class="dock-btn" id="btn-screen" title="Screen Vision">
+        <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <span class="btn-label">Share</span>
+      </button>
+
+      <!-- CHAT / TRANSCRIPT -->
+      <button class="dock-btn" id="btn-chat" title="Toggle Chat & Transcripts">
+        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span class="btn-label">Chat</span>
+      </button>
+
+      <!-- SETTINGS -->
+      <button class="dock-btn" id="btn-settings" title="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="btn-label">Settings</span>
+      </button>
+
+      <div class="dock-divider"></div>
+
+      <!-- LEAVE CALL / SLEEP -->
+      <button class="dock-btn leave-btn" id="btn-leave" title="End Call / Sleep">
+        <svg viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/></svg>
+        <span class="btn-label">End</span>
+      </button>
+    </footer>
+
+    <!-- Chat / Transcript Drawer -->
+    <aside class="chat-drawer" id="chat-drawer">
+      <div class="drawer-header">
+        <span class="drawer-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          In-Call Activity & Messages
+        </span>
+        <button class="drawer-close" id="drawer-close-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="drawer-body" id="chat-body">
+        <div class="chat-msg system">
+          <div class="msg-bubble">Conference session established with ZainAI. Speak or type below.</div>
+        </div>
+      </div>
+
+      <div class="drawer-footer">
+        <form class="input-form" id="chat-form">
+          <input type="text" class="chat-input" id="chat-input" placeholder="Send a message to ZainAI..." autocomplete="off">
+          <button type="submit" class="send-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </form>
+      </div>
+    </aside>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal">
+      <div class="modal-card">
+        <div class="modal-title">
+          <span>Call Settings</span>
+          <button class="drawer-close" id="modal-close-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Voice Selection</label>
+          <select class="form-select" id="voice-select">
+            <option value="Puck">Puck (Default, Expressive)</option>
+            <option value="Charon">Charon (Deep, Calm)</option>
+            <option value="Aoede">Aoede (Clear, Friendly)</option>
+            <option value="Fenrir">Fenrir (Authoritative)</option>
+            <option value="Kore">Kore (Warm, Conversational)</option>
+          </select>
+        </div>
+
+        <div class="form-switch">
+          <div>
+            <div class="switch-label">Wake Word Detection</div>
+            <div class="switch-desc">Respond to "Hey Jarvis" / "Hey Zain"</div>
+          </div>
+          <input type="checkbox" id="wake-toggle" checked>
+        </div>
+
+        <div class="form-switch">
+          <div>
+            <div class="switch-label">Push to Talk Mode</div>
+            <div class="switch-desc">Hold Space to speak, release to send</div>
+          </div>
+          <input type="checkbox" id="ptt-toggle">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/web/three.min.js"></script>
+  <script src="/web/GLTFLoader.js"></script>
+  <script src="/web/OrbitControls.js"></script>
+  <script src="/web/qwebchannel.js"></script>
+  <script>
+    // ── Application State ──────────────────────────────────────────────────────────
+    const state = {
+      isMuted: false,
+      aiState: 'LISTENING',
+      audioLevel: 0.0,
+      speakingLevel: 0.0,
+      // 15 Oculus Visemes (native to Avaturn ZainAI mesh)
+      visemeCurrent: {
+        viseme_sil: 0.0,
+        viseme_PP: 0.0,
+        viseme_FF: 0.0,
+        viseme_TH: 0.0,
+        viseme_DD: 0.0,
+        viseme_kk: 0.0,
+        viseme_CH: 0.0,
+        viseme_SS: 0.0,
+        viseme_nn: 0.0,
+        viseme_RR: 0.0,
+        viseme_aa: 0.0,
+        viseme_E: 0.0,
+        viseme_I: 0.0,
+        viseme_O: 0.0,
+        viseme_U: 0.0,
+        mouthStretch: 0.0
+      },
+      visemeTarget: {
+        viseme_sil: 0.0,
+        viseme_PP: 0.0,
+        viseme_FF: 0.0,
+        viseme_TH: 0.0,
+        viseme_DD: 0.0,
+        viseme_kk: 0.0,
+        viseme_CH: 0.0,
+        viseme_SS: 0.0,
+        viseme_nn: 0.0,
+        viseme_RR: 0.0,
+        viseme_aa: 0.0,
+        viseme_E: 0.0,
+        viseme_I: 0.0,
+        viseme_O: 0.0,
+        viseme_U: 0.0,
+        mouthStretch: 0.0
+      },
+      cameraActive: false,
+      chatOpen: false,
+      spotlight: 'ai',
+      callStartTime: Date.now()
+    };
+
+    // ── Three.js 3D Character Setup ──────────────────────────────────────────────
+    let scene, camera, renderer, clock, mixer, controls;
+    let avatarModel = null;
+    let morphMeshes = [];
+    let headBone = null;
+    let neckBone = null;
+    let mouse = { x: 0, y: 0, targetX: 0, targetY: 0 };
+
+    function initThree() {
+      const container = document.getElementById('tile-ai');
+      const canvas = document.getElementById('three-canvas');
+      const width = container.clientWidth || window.innerWidth;
+      const height = container.clientHeight || window.innerHeight;
+
+      scene = new THREE.Scene();
+      clock = new THREE.Clock();
+
+      // Camera: Portrait framing head and chest centered, directly at eye level
+      camera = new THREE.PerspectiveCamera(30, width / height, 0.1, 100);
+      camera.position.set(0, 1.665, 0.88);
+      camera.lookAt(0, 1.655, 0);
+
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+      });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.18;
+
+      // Orbit controls with constrained orbit
+      controls = new THREE.OrbitControls(camera, canvas);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.target.set(0, 1.655, 0);
+      controls.minDistance = 0.55;
+      controls.maxDistance = 1.4;
+      controls.maxPolarAngle = Math.PI / 2 + 0.1;
+      controls.minPolarAngle = Math.PI / 3;
+      controls.enablePan = false;
+
+      // Lighting — Video Conference Studio Setup
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.1);
+      scene.add(ambientLight);
+
+      // Key light (soft warm white)
+      const keyLight = new THREE.DirectionalLight(0xfffaf0, 1.9);
+      keyLight.position.set(1.4, 2.4, 1.8);
+      scene.add(keyLight);
+
+      // Fill light (cool sky tint)
+      const fillLight = new THREE.DirectionalLight(0xe0f2fe, 1.2);
+      fillLight.position.set(-1.6, 1.9, 1.4);
+      scene.add(fillLight);
+
+      // Rim light (studio cyan backlight for hair and shoulders)
+      const rimLight = new THREE.DirectionalLight(0x00d2ff, 2.4);
+      rimLight.position.set(0, 2.6, -1.8);
+      scene.add(rimLight);
+
+      // Gentle under-chin fill
+      const underFill = new THREE.DirectionalLight(0x38bdf8, 0.35);
+      underFill.position.set(0, 0.5, 1.2);
+      scene.add(underFill);
+
+      // Load 3D Avatar
+      loadAvatar();
+
+      // Mouse Parallax
+      window.addEventListener('mousemove', (e) => {
+        mouse.targetX = (e.clientX / window.innerWidth - 0.5) * 2;
+        mouse.targetY = (e.clientY / window.innerHeight - 0.5) * 2;
+      });
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function loadAvatar() {
+      const loader = new THREE.GLTFLoader();
+      const loadingMsg = document.getElementById('loading-msg');
+      loadingMsg.innerText = 'Loading 3D Character (lipsync_eyes.glb)...';
+
+      loader.load('/avatar/lipsync_eyes.glb', (gltf) => {
+        avatarModel = gltf.scene;
+        avatarModel.position.set(0, 0, 0);
+        // Orient avatar directly forward: the Maya idle animation baked a -29.2° yaw turn.
+        // Adding +29.2° turns the face directly forward toward the camera for direct eye contact.
+        avatarModel.rotation.set(0, THREE.MathUtils.degToRad(29.2), 0);
+        scene.add(avatarModel);
+
+        morphMeshes = [];
+        avatarModel.traverse((child) => {
+          if (child.isMesh && child.morphTargetDictionary) {
+            morphMeshes.push(child);
+          }
+          if (child.isBone) {
+            const name = child.name.toLowerCase();
+            if (name.includes('head') && !headBone) headBone = child;
+            if (name.includes('neck') && !neckBone) neckBone = child;
+          }
+        });
+
+        // Set up animations (e.g. Idle Maya Head animation)
+        if (gltf.animations && gltf.animations.length > 0) {
+          mixer = new THREE.AnimationMixer(avatarModel);
+          const idleClip = gltf.animations.find(a => a.name.includes('Idle') || a.name.includes('maya_head')) || gltf.animations[0];
+          if (idleClip) {
+            const action = mixer.clipAction(idleClip);
+            action.play();
+          }
+        }
+
+        // Hide loading screen
+        const overlay = document.getElementById('loading-overlay');
+        overlay.style.opacity = '0';
+        setTimeout(() => { overlay.style.display = 'none'; }, 500);
+
+        // Warm welcome smile
+        faceController.greet(2.2);
+
+        animate();
+      }, (xhr) => {
+        if (xhr.lengthComputable) {
+          const pct = Math.round((xhr.loaded / xhr.total) * 100);
+          document.getElementById('loading-msg').innerText = `Loading 3D Character: ${pct}%`;
+        }
+      }, (err) => {
+        console.error('Error loading avatar:', err);
+        document.getElementById('loading-msg').innerText = 'Initializing conference stage...';
+        setTimeout(() => {
+          document.getElementById('loading-overlay').style.display = 'none';
+        }, 800);
+      });
+    }
+
+    function onWindowResize() {
+      const container = document.getElementById('tile-ai');
+      if (!container || !renderer || !camera) return;
+      const width = container.clientWidth || 1;
+      const height = container.clientHeight || 1;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }
+
+    // ── Lip Sync & Viseme Blendshape Updating ─────────────────────────────────────
+    function setMorphWeight(name, weight) {
+      for (const mesh of morphMeshes) {
+        if (mesh.morphTargetDictionary && mesh.morphTargetDictionary[name] !== undefined) {
+          const idx = mesh.morphTargetDictionary[name];
+          mesh.morphTargetInfluences[idx] = Math.max(0, Math.min(1, weight));
+        }
+      }
+    }
+
+    const OCULUS_VISEMES = [
+      'viseme_sil', 'viseme_PP', 'viseme_FF', 'viseme_TH',
+      'viseme_DD',  'viseme_kk', 'viseme_CH', 'viseme_SS',
+      'viseme_nn',  'viseme_RR', 'viseme_aa', 'viseme_E',
+      'viseme_I',   'viseme_O',  'viseme_U'
+    ];
+
+    // ── Natural Face Controller (Smiling, Eye Movement, Blinking) ────────────────
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+    const approach = (cur, target, rate, dt) => cur + (target - cur) * (1 - Math.exp(-rate * dt));
+
+    const faceController = {
+      // Mood / Smiling
+      idleHappy: 0.32,        // light pleasant resting smile
+      talkingHappy: 0.18,     // softer smile while talking so lips articulate freely
+      moodNow: 0.32,
+      greetUntil: 0,
+
+      // Blinking
+      nextBlink: 2.2,
+      blinkPhase: -1,         // < 0 = not blinking
+      doubleBlink: false,
+
+      // Eye gaze & micro-saccades
+      gazeOffset: { yaw: 0, pitch: 0 },
+      gazeNow: { yaw: 0, pitch: 0 },
+      nextSaccade: 1.5,
+      lookAwayUntil: 0,
+      eyeContact: 0.88,       // 88% direct eye contact while talking
+      maxEyeYaw: 18,
+      maxEyeUp: 12,
+      maxEyeDown: 16,
+
+      t: 0,
+
+      update(dt) {
+        dt = Math.min(dt, 0.1);
+        this.t += dt;
+
+        // 1. Mood & Gentle Smiling
+        let targetMood = (state.aiState === 'SPEAKING') ? this.talkingHappy : this.idleHappy;
+        if (this.t < this.greetUntil) targetMood = 0.80;
+        this.moodNow = approach(this.moodNow, targetMood, 3.0, dt);
+
+        setMorphWeight('happy', this.moodNow);
+        setMorphWeight('mouthSmile', this.moodNow * 0.35);
+        setMorphWeight('mouthSmileLeft', this.moodNow * 0.25);
+        setMorphWeight('mouthSmileRight', this.moodNow * 0.25);
+        setMorphWeight('cheekSquintLeft', this.moodNow * 0.20);
+        setMorphWeight('cheekSquintRight', this.moodNow * 0.20);
+
+        // 2. Natural Blinking
+        if (this.blinkPhase < 0) {
+          this.nextBlink -= dt;
+          if (this.nextBlink <= 0) {
+            this.blinkPhase = 0;
+            this.doubleBlink = Math.random() < 0.15;
+          }
+        }
+
+        let b = 0;
+        if (this.blinkPhase >= 0) {
+          this.blinkPhase += dt;
+          const close = 0.07, hold = 0.03, open = 0.11;
+          const p = this.blinkPhase;
+          if (p < close) {
+            b = p / close;
+          } else if (p < close + hold) {
+            b = 1.0;
+          } else if (p < close + hold + open) {
+            b = 1.0 - (p - close - hold) / open;
+          } else {
+            b = 0.0;
+            if (this.doubleBlink) {
+              this.doubleBlink = false;
+              this.blinkPhase = -1;
+              this.nextBlink = 0.12;
+            } else {
+              this.blinkPhase = -1;
+              this.nextBlink = rand(2.2, 5.5);
+            }
+          }
+        }
+        // Smoothstep curve for blink
+        b = b * b * (3 - 2 * b);
+        setMorphWeight('eyeBlinkLeft', b);
+        setMorphWeight('eyeBlinkRight', b);
+
+        // 3. Natural Eye Movement (Gaze Saccades)
+        this.nextSaccade -= dt;
+        if (this.nextSaccade <= 0) {
+          const away = (state.aiState === 'SPEAKING') && (Math.random() > this.eyeContact);
+          if (away) {
+            // Short thoughtful glance away while talking
+            this.gazeOffset = {
+              yaw: rand(6, 12) * (Math.random() < 0.5 ? -1 : 1),
+              pitch: rand(-3, 3)
+            };
+            this.lookAwayUntil = this.t + rand(0.4, 0.8);
+            this.nextSaccade = rand(0.5, 1.0);
+          } else {
+            // Living micro-saccades around direct eye contact
+            this.gazeOffset = {
+              yaw: rand(-2.0, 2.0),
+              pitch: rand(-1.2, 1.2)
+            };
+            this.nextSaccade = rand(0.9, 2.8);
+          }
+        }
+
+        if (this.t > this.lookAwayUntil && Math.abs(this.gazeOffset.yaw) > 4) {
+          this.gazeOffset = { yaw: rand(-1.5, 1.5), pitch: rand(-1.0, 1.0) };
+        }
+
+        const yaw = clamp(this.gazeOffset.yaw, -this.maxEyeYaw, this.maxEyeYaw);
+        const pitch = clamp(this.gazeOffset.pitch, -this.maxEyeDown, this.maxEyeUp);
+
+        // Saccade speed (rate 25)
+        this.gazeNow.yaw = approach(this.gazeNow.yaw, yaw, 25.0, dt);
+        this.gazeNow.pitch = approach(this.gazeNow.pitch, pitch, 25.0, dt);
+
+        const gy = this.gazeNow.yaw;
+        const gp = this.gazeNow.pitch;
+
+        // Model eye look ranges: in/out 30°, up 20°, down 28°
+        const toL = clamp(gy / 30.0, 0, 1);
+        const toR = clamp(-gy / 30.0, 0, 1);
+        setMorphWeight('eyeLookOutLeft', toL);
+        setMorphWeight('eyeLookInRight', toL);
+        setMorphWeight('eyeLookInLeft', toR);
+        setMorphWeight('eyeLookOutRight', toR);
+
+        const up = clamp(gp / 20.0, 0, 1);
+        const down = clamp(-gp / 28.0, 0, 1);
+        setMorphWeight('eyeLookUpLeft', up);
+        setMorphWeight('eyeLookUpRight', up);
+        setMorphWeight('eyeLookDownLeft', down);
+        setMorphWeight('eyeLookDownRight', down);
+      },
+
+      greet(seconds = 1.6) {
+        this.greetUntil = this.t + seconds;
+      }
+    };
+
+    function updateBlendshapes(dt) {
+      // Natural speech articulation (dt * 26.0)
+      const lerpSpeed = Math.min(1.0, dt * 26.0);
+
+      for (const v of OCULUS_VISEMES) {
+        state.visemeCurrent[v] += (state.visemeTarget[v] - state.visemeCurrent[v]) * lerpSpeed;
+        setMorphWeight(v, state.visemeCurrent[v]);
+      }
+      state.visemeCurrent.mouthStretch += ((state.visemeTarget.mouthStretch || 0.0) - state.visemeCurrent.mouthStretch) * lerpSpeed;
+      setMorphWeight('mouthStretch', state.visemeCurrent.mouthStretch);
+
+      // Update smiling, blinking, and eye gaze
+      faceController.update(dt);
+
+      // Lock conflicting additive ARKit shapes to 0.0
+      setMorphWeight('jawOpen', 0.0);
+      setMorphWeight('mouthOpen', 0.0);
+      setMorphWeight('mouthFunnel', 0.0);
+      setMorphWeight('mouthPucker', 0.0);
+      setMorphWeight('mouthPress', 0.0);
+      setMorphWeight('mouthUpperUp', 0.0);
+      setMorphWeight('mouthLowerDown', 0.0);
+      setMorphWeight('mouthRollLower', 0.0);
+
+      // Smooth decay when speech pauses
+      if (state.aiState !== 'SPEAKING') {
+        for (const v of OCULUS_VISEMES) {
+          state.visemeTarget[v] *= 0.75;
+        }
+      }
+    }
+
+    // ── Animation Loop ────────────────────────────────────────────────────────────
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+
+      if (mixer) {
+        mixer.update(dt);
+      }
+
+      if (controls) {
+        controls.update();
+      }
+
+      // Maintain steady direct eye contact with user
+
+      // Update lipsync blendshapes
+      updateBlendshapes(dt);
+
+      // Update AI voice visualizer bars
+      updateVoiceBars();
+
+      renderer.render(scene, camera);
+    }
+
+    function updateVoiceBars() {
+      const bars = document.querySelectorAll('#ai-voice-bars .v-bar');
+      const isSpeaking = state.aiState === 'SPEAKING';
+      const amp = isSpeaking ? (state.speakingLevel || state.audioLevel) : 0.0;
+
+      bars.forEach((bar, i) => {
+        let height = 4;
+        if (isSpeaking && amp > 0.02) {
+          const offset = Math.sin(Date.now() * 0.018 + i * 1.5);
+          height = Math.max(4, Math.min(18, amp * 24 + offset * 6));
+        }
+        bar.style.height = `${height}px`;
+      });
+    }
+
+    // ── Call State Machine & Web Audio Ringing ────────────────────────────────────
+    let audioCtx = null;
+    let ringInterval = null;
+    let isRinging = false;
+    let callTimerTimeout = null;
+    let callState = 'standby'; // 'standby' (sleeping), 'calling' (ringing), 'connected' (in call)
+
+    function getAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function playPhoneRingBurst() {
+      try {
+        const ctx = getAudioContext();
+        const now = ctx.currentTime;
+
+        // Realistic dual-tone conference/phone ring: 440 Hz + 480 Hz
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc1.type = 'sine';
+        osc2.type = 'sine';
+        osc1.frequency.setValueAtTime(440, now);
+        osc2.frequency.setValueAtTime(480, now);
+
+        // Smooth 1.5s ring burst envelope
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.18, now + 0.04);
+        gain.gain.setValueAtTime(0.18, now + 1.4);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
+
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 1.52);
+      } catch (err) {
+        console.warn('Audio ring error:', err);
+      }
+    }
+
+    function startRingingSound() {
+      if (isRinging) return;
+      isRinging = true;
+      playPhoneRingBurst();
+      ringInterval = setInterval(() => {
+        if (isRinging) {
+          playPhoneRingBurst();
+        }
+      }, 3400); // 1.5s ring + 1.9s pause
+    }
+
+    function stopRingingSound() {
+      isRinging = false;
+      if (ringInterval) {
+        clearInterval(ringInterval);
+        ringInterval = null;
+      }
+    }
+
+    function playConnectedChime() {
+      try {
+        const ctx = getAudioContext();
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, now); // C5
+        osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.16); // G5
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.42);
+      } catch (e) {
+        console.warn('Connected chime error:', e);
+      }
+    }
+
+    function initiateCall() {
+      callState = 'calling';
+      getAudioContext();
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.resume();
+      }
+      const overlay = document.getElementById('call-screen-overlay');
+      const btnStart = document.getElementById('btn-start-call');
+      const btnCancel = document.getElementById('btn-cancel-call');
+      const statusText = document.getElementById('call-status-text');
+      const desc = document.getElementById('call-desc');
+
+      overlay.className = 'call-overlay calling';
+      btnStart.style.display = 'none';
+      btnCancel.style.display = 'flex';
+      statusText.innerText = 'Ringing...';
+      desc.innerText = 'Calling ZainAI... Establishing neural audio-visual connection.';
+
+      // Start phone ringing tone
+      startRingingSound();
+
+      // Ring for exactly 2 seconds, then connect and start avatar speaking
+      callTimerTimeout = setTimeout(() => {
+        if (callState === 'calling') {
+          onAgentConnected();
+        }
+      }, 2000);
+    }
+
+    function cancelCall() {
+      if (callTimerTimeout) {
+        clearTimeout(callTimerTimeout);
+        callTimerTimeout = null;
+      }
+      stopRingingSound();
+      stopSpeaking();
+      stopVoiceRecognition();
+      callState = 'standby';
+
+      // Signal backend to enter sleep mode
+      if (window.pyBridge && window.pyBridge.onLeaveCall) {
+        window.pyBridge.onLeaveCall();
+      } else if (window.wsBridge && window.wsBridge.readyState === WebSocket.OPEN) {
+        window.wsBridge.send(JSON.stringify({ action: 'leave' }));
+      }
+
+      enterSleepingMode();
+    }
+
+    function enterSleepingMode() {
+      if (callTimerTimeout) {
+        clearTimeout(callTimerTimeout);
+        callTimerTimeout = null;
+      }
+      stopRingingSound();
+      stopSpeaking();
+      stopVoiceRecognition();
+      callState = 'standby';
+      state.callStartTime = 0;
+
+      // Turn off camera if active
+      if (state.cameraActive) {
+        toggleCamera();
+      }
+
+      const overlay = document.getElementById('call-screen-overlay');
+      const btnStart = document.getElementById('btn-start-call');
+      const btnCancel = document.getElementById('btn-cancel-call');
+      const statusText = document.getElementById('call-status-text');
+      const desc = document.getElementById('call-desc');
+
+      overlay.className = 'call-overlay standby';
+      btnStart.style.display = 'flex';
+      btnCancel.style.display = 'none';
+      statusText.innerText = 'Sleeping Mode';
+      desc.innerText = 'Assistant is currently in sleeping mode. Click Start Call to connect.';
+      overlay.classList.remove('hidden');
+    }
+
+    function onAgentConnected() {
+      if (callState === 'connected') return;
+      if (callTimerTimeout) {
+        clearTimeout(callTimerTimeout);
+        callTimerTimeout = null;
+      }
+      stopRingingSound();
+      playConnectedChime();
+      callState = 'connected';
+      state.callStartTime = Date.now();
+
+      const overlay = document.getElementById('call-screen-overlay');
+      const statusText = document.getElementById('call-status-text');
+      const desc = document.getElementById('call-desc');
+
+      overlay.className = 'call-overlay connected';
+      statusText.innerText = 'Connected';
+      desc.innerText = 'Connected! Joining conference room...';
+
+      // Signal backend that call has started and trigger avatar speaking
+      if (window.pyBridge && window.pyBridge.onStartCall) {
+        window.pyBridge.onStartCall();
+      } else if (window.wsBridge && window.wsBridge.readyState === WebSocket.OPEN) {
+        window.wsBridge.send(JSON.stringify({ action: 'start_call' }));
+      }
+
+      // Smoothly fade out call overlay to reveal avatar and start speech & mic listening
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+        if (typeof faceController !== 'undefined') {
+          faceController.greet(2.5);
+        }
+        startVoiceRecognition();
+        onWindowResize();
+      }, 500);
+    }
+
+    // ── Call Timer ────────────────────────────────────────────────────────────────
+    setInterval(() => {
+      if (callState !== 'connected' || !state.callStartTime) {
+        document.getElementById('call-timer').innerText = '00:00:00';
+        return;
+      }
+      const elapsed = Math.floor((Date.now() - state.callStartTime) / 1000);
+      const hrs = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+      const mins = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+      const secs = String(elapsed % 60).padStart(2, '0');
+      document.getElementById('call-timer').innerText = `${hrs}:${mins}:${secs}`;
+    }, 1000);
+
+    // ── Spotlight Swapping (ZainAI vs Host) ───────────────────────────────────────
+    function toggleSpotlight() {
+      const tileAi = document.getElementById('tile-ai');
+      const tileHost = document.getElementById('tile-host');
+      if (!tileAi || !tileHost) return;
+
+      const isHostMain = tileHost.classList.contains('main-tile');
+      if (isHostMain) {
+        // AI returns to main stage, Host to PIP
+        tileHost.classList.remove('main-tile');
+        tileHost.classList.add('pip-tile');
+        tileAi.classList.remove('pip-tile');
+        tileAi.classList.add('main-tile');
+        state.spotlight = 'ai';
+      } else {
+        // Host takes main stage, AI moves to PIP
+        tileAi.classList.remove('main-tile');
+        tileAi.classList.add('pip-tile');
+        tileHost.classList.remove('pip-tile');
+        tileHost.classList.add('main-tile');
+        state.spotlight = 'host';
+      }
+
+      onWindowResize();
+      setTimeout(onWindowResize, 80);
+      setTimeout(onWindowResize, 200);
+      setTimeout(onWindowResize, 400);
+    }
+
+    // ── User Camera Setup (WebRTC / getUserMedia) ──────────────────────────────────
+    async function setupCamera() {
+      const video = document.getElementById('user-video');
+      const fallback = document.getElementById('self-fallback');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+        video.srcObject = stream;
+        video.style.display = 'block';
+        if (fallback) fallback.style.display = 'none';
+        state.cameraActive = true;
+        updateCameraUI();
+        console.log('[Conference] Camera started');
+      } catch (err) {
+        console.warn('[Conference] Camera error:', err);
+        video.style.display = 'none';
+        if (fallback) fallback.style.display = 'flex';
+        state.cameraActive = false;
+        updateCameraUI();
+      }
+    }
+
+    function toggleCamera() {
+      const video = document.getElementById('user-video');
+      const fallback = document.getElementById('self-fallback');
+      if (state.cameraActive || (video && video.srcObject)) {
+        if (video && video.srcObject) {
+          video.srcObject.getTracks().forEach(t => t.stop());
+          video.srcObject = null;
+        }
+        if (video) video.style.display = 'none';
+        if (fallback) fallback.style.display = 'flex';
+        state.cameraActive = false;
+      } else {
+        setupCamera();
+      }
+      updateCameraUI();
+      if (window.pyBridge && window.pyBridge.onToggleCamera) {
+        window.pyBridge.onToggleCamera(state.cameraActive);
+      }
+    }
+
+    function updateCameraUI() {
+      const btn = document.getElementById('btn-camera');
+      const iconOn = document.getElementById('icon-cam-on');
+      const iconOff = document.getElementById('icon-cam-off');
+      const lbl = document.getElementById('lbl-camera');
+
+      if (state.cameraActive) {
+        if (btn) {
+          btn.classList.remove('off');
+          btn.classList.add('active');
+        }
+        if (iconOn) iconOn.style.display = 'block';
+        if (iconOff) iconOff.style.display = 'none';
+        if (lbl) lbl.innerText = 'Cam On';
+      } else {
+        if (btn) {
+          btn.classList.remove('active');
+          btn.classList.add('off');
+        }
+        if (iconOn) iconOn.style.display = 'none';
+        if (iconOff) iconOff.style.display = 'block';
+        if (lbl) lbl.innerText = 'Cam Off';
+      }
+    }
+
+    // ── Bridge to Python Backend (QWebChannel / WebSocket) ────────────────────────
+    let pyBridge = null;
+
+    function initBridge() {
+      if (typeof QWebChannel !== 'undefined' && typeof qt !== 'undefined') {
+        new QWebChannel(qt.webChannelTransport, function(channel) {
+          pyBridge = channel.objects.bridge;
+          window.pyBridge = pyBridge;
+          console.log('[Conference] Connected to PyQt6 WebChannel Bridge');
+
+          pyBridge.stateChanged.connect((st) => onStateChanged(st));
+          pyBridge.audioLevelChanged.connect((lvl) => onAudioLevel(lvl));
+          pyBridge.visemeFrame.connect((lvl, open, wide, tag) => onVisemeFrame(lvl, open, wide, tag));
+          pyBridge.logAdded.connect((msg) => addChatMessage('system', msg));
+          pyBridge.contentReceived.connect((title, txt) => addChatMessage('assistant', `**${title}**\n${txt}`));
+          pyBridge.muteChanged.connect((muted) => setMuteState(muted));
+        });
+      } else {
+        initWebSocket();
+      }
+    }
+
+    function initWebSocket() {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host || '127.0.0.1:8085';
+      const wsUrl = `${proto}//${host}/ws`;
+      let ws = null;
+
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+          console.log('[Conference] Connected to WebSocket');
+          addChatMessage('system', 'Connected to live AI session.');
+        };
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'state') onStateChanged(data.state);
+            else if (data.type === 'audio_level') onAudioLevel(data.level);
+            else if (data.type === 'viseme') onVisemeFrame(data.level, data.openness, data.width, data.tag);
+            else if (data.type === 'log') addChatMessage('system', data.message);
+            else if (data.type === 'content') addChatMessage('assistant', `${data.title}\n${data.text}`);
+            else if (data.type === 'mute') setMuteState(data.muted);
+          } catch (e) {
+            console.error('WS parse error:', e);
+          }
+        };
+        ws.onclose = () => {
+          setTimeout(initWebSocket, 2000);
+        };
+
+        window.wsBridge = ws;
+      } catch (e) {
+        console.warn('WebSocket init exception:', e);
+      }
+    }
+
+    // ── State Handlers ────────────────────────────────────────────────────────────
+    function onStateChanged(st) {
+      state.aiState = st.toUpperCase();
+      const chip = document.getElementById('status-chip');
+      const text = document.getElementById('status-text');
+
+      chip.className = `status-chip ${state.aiState.toLowerCase()}`;
+      text.innerText = state.aiState;
+
+      // Call state machine synchronization
+      if (callState === 'calling' && (state.aiState === 'LISTENING' || state.aiState === 'SPEAKING')) {
+        onAgentConnected();
+      } else if (state.aiState === 'SLEEPING') {
+        if (callState === 'connected' || callState === 'calling') {
+          enterSleepingMode();
+        }
+      }
+
+      if (state.aiState === 'SPEAKING' && typeof faceController !== 'undefined') {
+        faceController.greet(1.2);
+      } else {
+        state.speakingLevel = 0.0;
+      }
+    }
+
+    function onAudioLevel(lvl) {
+      state.audioLevel = lvl;
+      if (state.aiState === 'SPEAKING') {
+        state.speakingLevel = lvl;
+      }
+    }
+
+    function onVisemeFrame(level, openness, width, tag) {
+      if (state.aiState !== 'SPEAKING' || level <= 0.02) {
+        for (const v of OCULUS_VISEMES) {
+          state.visemeTarget[v] = 0.0;
+        }
+        state.visemeTarget.mouthStretch = 0.0;
+        return;
+      }
+
+      state.speakingLevel = level;
+
+      // Wider, more expressive conversational speech amplitude (intensity up to 0.52)
+      const intensity = Math.min(0.52, Math.pow(level, 0.72) * 0.98);
+
+      // Reset all targets before activating current phoneme (clean articulation)
+      for (const v of OCULUS_VISEMES) {
+        state.visemeTarget[v] = 0.0;
+      }
+      state.visemeTarget.mouthStretch = 0.0;
+
+      const t = (tag || '').toUpperCase().trim();
+      const wideBonus = Math.max(0, width);
+
+      switch (t) {
+        case 'AA':
+          // Open vowel (father, car) - wide open oral cavity
+          state.visemeTarget.viseme_aa = intensity * (0.65 + 0.35 * Math.min(1.0, openness));
+          state.visemeTarget.mouthStretch = intensity * 0.22;
+          break;
+        case 'E':
+          // Mid spread vowel (bed, say) - wide lateral spread
+          state.visemeTarget.viseme_E = intensity * 0.95;
+          state.visemeTarget.mouthStretch = intensity * (0.35 + wideBonus * 0.25);
+          break;
+        case 'I':
+          // Close front spread vowel (see, bit) - wide smiling spread
+          state.visemeTarget.viseme_I = intensity * 0.92;
+          state.visemeTarget.mouthStretch = intensity * (0.38 + wideBonus * 0.30);
+          break;
+        case 'O':
+          // Rounded back vowel (go, law)
+          state.visemeTarget.viseme_O = intensity * 0.88;
+          break;
+        case 'U':
+          // Rounded closed vowel (too, boot)
+          state.visemeTarget.viseme_U = intensity * 0.82;
+          break;
+        case 'MBP':
+          // Bilabial closure: lips firmly together for M, B, P
+          state.visemeTarget.viseme_PP = Math.min(0.88, intensity * 1.6);
+          break;
+        case 'FV':
+          // Labiodental: lower lip to teeth
+          state.visemeTarget.viseme_FF = intensity * 0.82;
+          state.visemeTarget.mouthStretch = intensity * 0.15;
+          break;
+        case 'S':
+          // Sibilant: teeth close together, corners widened
+          state.visemeTarget.viseme_SS = intensity * 0.80;
+          state.visemeTarget.mouthStretch = intensity * 0.25;
+          break;
+        case 'TD':
+          // Alveolar tap: T, D, N
+          state.visemeTarget.viseme_DD = intensity * 0.78;
+          state.visemeTarget.mouthStretch = intensity * 0.15;
+          break;
+        case 'K':
+          // Velar consonant: K, G
+          state.visemeTarget.viseme_kk = intensity * 0.78;
+          break;
+        case 'CH':
+          // Affricate: CH, J, SH
+          state.visemeTarget.viseme_CH = intensity * 0.82;
+          state.visemeTarget.mouthStretch = intensity * 0.20;
+          break;
+        case 'R':
+          // Liquid: R
+          state.visemeTarget.viseme_RR = intensity * 0.76;
+          break;
+        case 'L':
+          // Lateral: L
+          state.visemeTarget.viseme_nn = intensity * 0.72;
+          state.visemeTarget.mouthStretch = intensity * 0.20;
+          break;
+        case 'REST':
+          state.visemeTarget.viseme_sil = 0.35;
+          break;
+        default:
+          // Formant fallback
+          if (openness < 0.12) {
+            state.visemeTarget.viseme_PP = intensity * 0.80;
+          } else if (openness > 0.40) {
+            if (width < -0.15) {
+              state.visemeTarget.viseme_O = intensity * 0.85;
+            } else if (width > 0.15) {
+              state.visemeTarget.viseme_E = intensity * 0.90;
+              state.visemeTarget.mouthStretch = intensity * 0.30;
+            } else {
+              state.visemeTarget.viseme_aa = intensity * 0.75;
+              state.visemeTarget.mouthStretch = intensity * 0.20;
+            }
+          } else {
+            if (width < -0.15) {
+              state.visemeTarget.viseme_U = intensity * 0.75;
+            } else if (width > 0.15) {
+              state.visemeTarget.viseme_I = intensity * 0.85;
+              state.visemeTarget.mouthStretch = intensity * 0.35;
+            } else {
+              state.visemeTarget.viseme_DD = intensity * 0.55;
+              state.visemeTarget.viseme_aa = intensity * 0.35;
+              state.visemeTarget.mouthStretch = intensity * 0.15;
+            }
+          }
+          break;
+      }
+    }
+
+    // ── Mute & Interrupt Controls ─────────────────────────────────────────────────
+    function toggleMute() {
+      setMuteState(!state.isMuted);
+      if (window.pyBridge && window.pyBridge.onToggleMute) {
+        window.pyBridge.onToggleMute(state.isMuted);
+      } else if (window.wsBridge && window.wsBridge.readyState === WebSocket.OPEN) {
+        window.wsBridge.send(JSON.stringify({ action: 'toggle_mute', muted: state.isMuted }));
+      }
+    }
+
+    function setMuteState(muted) {
+      state.isMuted = muted;
+      const btn = document.getElementById('btn-mute');
+      const iconOn = document.getElementById('icon-mic-on');
+      const iconOff = document.getElementById('icon-mic-off');
+      const lbl = document.getElementById('lbl-mute');
+      const selfMic = document.getElementById('self-mic-indicator');
+
+      if (state.isMuted) {
+        btn.classList.remove('active');
+        btn.classList.add('muted');
+        iconOn.style.display = 'none';
+        iconOff.style.display = 'block';
+        lbl.innerText = 'Unmute';
+        selfMic.innerText = '🔇';
+        stopVoiceRecognition();
+      } else {
+        btn.classList.remove('muted');
+        btn.classList.add('active');
+        iconOn.style.display = 'block';
+        iconOff.style.display = 'none';
+        lbl.innerText = 'Mute';
+        selfMic.innerText = '🎙️';
+        if (callState === 'connected') {
+          startVoiceRecognition();
+        }
+      }
+    }
+
+    function interruptAI() {
+      // Tactile visual pop
+      const btn = document.getElementById('btn-interrupt');
+      btn.style.transform = 'scale(0.92)';
+      setTimeout(() => { btn.style.transform = ''; }, 150);
+
+      // Snap mouth closed and stop voice speaking immediately
+      stopSpeaking();
+      state.visemeTarget.jaw = 0.0;
+      state.visemeTarget.mouthOpen = 0.0;
+      state.visemeTarget.aa = 0.0;
+      state.visemeTarget.E = 0.0;
+      state.visemeTarget.I = 0.0;
+      state.visemeTarget.O = 0.0;
+      state.visemeTarget.U = 0.0;
+      state.visemeTarget.PP = 0.0;
+
+      onStateChanged('LISTENING');
+      addChatMessage('system', '✋ Interrupted speech.');
+
+      if (window.pyBridge && window.pyBridge.onInterrupt) {
+        window.pyBridge.onInterrupt();
+      } else if (window.wsBridge && window.wsBridge.readyState === WebSocket.OPEN) {
+        window.wsBridge.send(JSON.stringify({ action: 'interrupt' }));
+      }
+    }
+
+    // ── Browser Text-to-Speech (Speaking Voice) ──────────────────────────────────
+    let speechAnimInterval = null;
+    let selectedVoice = null;
+
+    function initVoices() {
+      if (!('speechSynthesis' in window)) return;
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices || voices.length === 0) return;
+      selectedVoice = voices.find(v => v.lang.startsWith('en') && (
+        v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Daniel')
+      )) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = initVoices;
+      initVoices();
+    }
+
+    function isEmbeddedQt() {
+      return !!window.pyBridge || (navigator.userAgent && navigator.userAgent.includes('QtWebEngine'));
+    }
+
+    function speakText(rawText) {
+      if (isEmbeddedQt()) return; // Desktop app plays Gemini audio via Python PyAudio
+      if (!('speechSynthesis' in window) || !rawText) return;
+      stopSpeaking();
+
+      // Clean text: strip title headers, markdown asterisks, emojis, bullets
+      let clean = rawText
+        .replace(/^ZainAI\s*:?\s*/i, '')
+        .replace(/[*#_`~>\[\]\(\)]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!clean) return;
+
+      const utter = new SpeechSynthesisUtterance(clean);
+      if (!selectedVoice) initVoices();
+      if (selectedVoice) utter.voice = selectedVoice;
+      utter.rate = 1.05;
+      utter.pitch = 1.0;
+
+      utter.onstart = () => {
+        onStateChanged('SPEAKING');
+        const vowels = ['AA', 'E', 'I', 'O', 'U'];
+        if (speechAnimInterval) clearInterval(speechAnimInterval);
+        speechAnimInterval = setInterval(() => {
+          if (state.aiState !== 'SPEAKING') {
+            clearInterval(speechAnimInterval);
+            return;
+          }
+          const lvl = 0.45 + Math.random() * 0.45;
+          const op = 0.4 + Math.random() * 0.5;
+          const wd = 0.25 + Math.random() * 0.45;
+          const tag = vowels[Math.floor(Math.random() * vowels.length)];
+          onVisemeFrame(lvl, op, wd, tag);
+        }, 70);
+      };
+
+      utter.onend = () => {
+        stopSpeaking();
+        onStateChanged('LISTENING');
+      };
+
+      utter.onerror = () => {
+        stopSpeaking();
+        onStateChanged('LISTENING');
+      };
+
+      try {
+        window.speechSynthesis.speak(utter);
+      } catch (e) {
+        console.warn('Speech synthesis error:', e);
+      }
+    }
+
+    function stopSpeaking() {
+      if ('speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+      }
+      if (speechAnimInterval) {
+        clearInterval(speechAnimInterval);
+        speechAnimInterval = null;
+      }
+      onVisemeFrame(0.0, 0.0, 0.0, '');
+    }
+
+    // ── Continuous Voice Recognition (Speech-to-Text) ───────────────────────────
+    let speechRec = null;
+    let isRecognizing = false;
+
+    function initVoiceRecognition() {
+      if (isEmbeddedQt()) return; // Desktop app uses PyAudio for direct mic capture
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) {
+        console.warn('SpeechRecognition not supported in this browser.');
+        return;
+      }
+
+      speechRec = new SpeechRec();
+      speechRec.continuous = true;
+      speechRec.interimResults = true;
+      speechRec.lang = 'en-US';
+
+      speechRec.onstart = () => {
+        isRecognizing = true;
+        const micInd = document.getElementById('self-mic-indicator');
+        if (micInd) micInd.style.opacity = '1.0';
+      };
+
+      speechRec.onresult = (event) => {
+        if (state.isMuted || callState !== 'connected') return;
+
+        let interim = '';
+        let finalTxt = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const res = event.results[i];
+          if (res.isFinal) {
+            finalTxt += res[0].transcript;
+          } else {
+            interim += res[0].transcript;
+          }
+        }
+
+        // Interrupt AI if user speaks
+        if ((finalTxt || interim) && state.aiState === 'SPEAKING') {
+          stopSpeaking();
+          onStateChanged('LISTENING');
+        }
+
+        if (finalTxt.trim()) {
+          const cmd = finalTxt.trim();
+          sendChatMessage(cmd);
+        }
+      };
+
+      speechRec.onerror = (e) => {
+        if (e.error !== 'no-speech') {
+          console.warn('Speech recognition warning:', e.error);
+        }
+      };
+
+      speechRec.onend = () => {
+        isRecognizing = false;
+        if (callState === 'connected' && !state.isMuted) {
+          try { speechRec.start(); } catch (_) {}
+        }
+      };
+    }
+
+    function startVoiceRecognition() {
+      if (!speechRec) initVoiceRecognition();
+      if (speechRec && !isRecognizing && !state.isMuted) {
+        try { speechRec.start(); } catch (_) {}
+      }
+    }
+
+    function stopVoiceRecognition() {
+      if (speechRec && isRecognizing) {
+        try { speechRec.stop(); } catch (_) {}
+        isRecognizing = false;
+      }
+    }
+
+    // ── Chat Drawer & Messages ────────────────────────────────────────────────────
+    function toggleChat(open) {
+      const drawer = document.getElementById('chat-drawer');
+      state.chatOpen = open !== undefined ? open : !state.chatOpen;
+      if (state.chatOpen) {
+        drawer.classList.add('open');
+        document.getElementById('chat-input').focus();
+      } else {
+        drawer.classList.remove('open');
+      }
+    }
+
+    function addChatMessage(role, text) {
+      const body = document.getElementById('chat-body');
+      const msg = document.createElement('div');
+      msg.className = `chat-msg ${role}`;
+
+      if (role !== 'system') {
+        const sender = document.createElement('div');
+        sender.className = 'msg-sender';
+        sender.innerText = role === 'user' ? 'You' : 'ZainAI';
+        msg.appendChild(sender);
+      }
+
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+      bubble.innerText = text;
+      msg.appendChild(bubble);
+
+      body.appendChild(msg);
+      body.scrollTop = body.scrollHeight;
+
+      // Speak assistant answers using browser voice
+      if (role === 'assistant') {
+        speakText(text);
+      }
+    }
+
+    function sendChatMessage(text) {
+      if (!text || !text.trim()) return;
+      const clean = text.trim();
+      addChatMessage('user', clean);
+
+      if (window.pyBridge && window.pyBridge.onSendCommand) {
+        window.pyBridge.onSendCommand(clean);
+      } else if (window.wsBridge && window.wsBridge.readyState === WebSocket.OPEN) {
+        window.wsBridge.send(JSON.stringify({ action: 'command', text: clean }));
+      }
+    }
+
+    // ── Keyboard Shortcuts ────────────────────────────────────────────────────────
+    window.addEventListener('keydown', (e) => {
+      if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+        if (e.key === 'Escape') {
+          toggleChat(false);
+        }
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        interruptAI();
+      } else if (e.key.toLowerCase() === 'm' || e.key === 'F4') {
+        e.preventDefault();
+        toggleMute();
+      } else if (e.key.toLowerCase() === 'c') {
+        toggleChat();
+      } else if (e.key.toLowerCase() === 'v') {
+        toggleCamera();
+      }
+    });
+
+    // ── UI Event Listeners ────────────────────────────────────────────────────────
+    document.getElementById('btn-mute').addEventListener('click', toggleMute);
+    document.getElementById('btn-interrupt').addEventListener('click', interruptAI);
+    document.getElementById('btn-camera').addEventListener('click', toggleCamera);
+    document.getElementById('btn-chat').addEventListener('click', () => toggleChat());
+    document.getElementById('drawer-close-btn').addEventListener('click', () => toggleChat(false));
+
+    // Spotlight tile click swapping (clicking the PIP tile swaps it to main stage)
+    const hostTile = document.getElementById('tile-host');
+    const aiTile = document.getElementById('tile-ai');
+    if (hostTile) {
+      hostTile.addEventListener('click', () => {
+        if (hostTile.classList.contains('pip-tile')) {
+          toggleSpotlight();
+        }
+      });
+    }
+    if (aiTile) {
+      aiTile.addEventListener('click', () => {
+        if (aiTile.classList.contains('pip-tile')) {
+          toggleSpotlight();
+        }
+      });
+    }
+
+    document.getElementById('btn-screen').addEventListener('click', () => {
+      addChatMessage('system', 'Capturing screen for vision analysis...');
+      if (window.pyBridge && window.pyBridge.onScreenCapture) {
+        window.pyBridge.onScreenCapture();
+      } else if (window.wsBridge && window.wsBridge.readyState === WebSocket.OPEN) {
+        window.wsBridge.send(JSON.stringify({ action: 'screen_capture' }));
+      }
+    });
+
+    document.getElementById('btn-settings').addEventListener('click', () => {
+      document.getElementById('settings-modal').classList.add('open');
+    });
+    document.getElementById('modal-close-btn').addEventListener('click', () => {
+      document.getElementById('settings-modal').classList.remove('open');
+    });
+
+    // Call screen action listeners
+    document.getElementById('btn-start-call').addEventListener('click', initiateCall);
+    document.getElementById('btn-cancel-call').addEventListener('click', cancelCall);
+
+    document.getElementById('btn-leave').addEventListener('click', () => {
+      cancelCall();
+      addChatMessage('system', 'Call ended. Assistant entered sleeping mode.');
+    });
+
+    document.getElementById('chat-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('chat-input');
+      const val = input.value;
+      input.value = '';
+      sendChatMessage(val);
+    });
+
+    document.getElementById('voice-select').addEventListener('change', (e) => {
+      const v = e.target.value;
+      addChatMessage('system', `Voice switched to ${v}.`);
+      if (window.pyBridge && window.pyBridge.onVoiceChanged) {
+        window.pyBridge.onVoiceChanged(v);
+      }
+    });
+
+    // ── Global API exposure for Qt WebEngine evaluation ───────────────────────────
+    window.updateState = onStateChanged;
+    window.updateAudioLevel = onAudioLevel;
+    window.pushViseme = onVisemeFrame;
+    window.setMuted = setMuteState;
+    window.toggleCamera = toggleCamera;
+    window.toggleSpotlight = toggleSpotlight;
+    window.initiateCall = initiateCall;
+    window.cancelCall = cancelCall;
+    window.addLog = (msg) => addChatMessage('system', msg);
+    window.addAssistantMessage = (title, txt) => addChatMessage('assistant', `**${title}**\n${txt}`);
+
+    // Initialise Everything
+    window.addEventListener('DOMContentLoaded', () => {
+      initThree();
+      initBridge();
+      updateCameraUI();
+    });
+  </script>
+</body>
+</html>

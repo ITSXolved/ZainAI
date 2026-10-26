@@ -251,7 +251,7 @@ class VisemeStream:
             if level <= 0.0:
                 # Silence: let the queue wait rather than burning through it
                 # during a pause, or the mouth ends up ahead of the voice.
-                out.append((0.0, 0.0, 0.0))
+                out.append((0.0, 0.0, 0.0, "REST"))
                 continue
 
             self._carry += hop / max(1e-3, self._step_seconds() * self._cur[1])
@@ -262,6 +262,7 @@ class VisemeStream:
                 self._carry = 1.0          # queue empty — hold the last shape
 
             t_open, t_wide, closure = VISEMES.get(self._cur[0], VISEMES["REST"])
+            tag = self._cur[0]
             if self._q or self._cur[0] != "REST":
                 # Text leads the shape; the audio keeps it honest so a bad
                 # transcript alignment still tracks the real voice.
@@ -270,6 +271,7 @@ class VisemeStream:
             else:
                 o, w = a_open, a_wide
                 closure = 0.0
+                tag = ""
             o *= 1.0 - closure
-            out.append((level, max(0.0, min(1.0, o)), max(-1.0, min(1.0, w))))
+            out.append((level, max(0.0, min(1.0, o)), max(-1.0, min(1.0, w)), tag))
         return out
