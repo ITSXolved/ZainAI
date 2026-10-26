@@ -846,5 +846,5 @@ Engineered by a developer building a real-world ZainAI-style assistant.
 
 | Platform | Link |
 | --- | --- |
-| YouTube | [@FatihMakes](https://www.youtube.com/@FatihMakes) |
-| Instagram | [@fatihmakes](https://www.instagram.com/fatihmakes) |
+| YouTube | [@CogZain](https://www.youtube.com/@CogZain) |
+| Instagram | [@zain_ds](https://www.instagram.com/zainu_ds/) |
